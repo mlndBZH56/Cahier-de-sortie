@@ -10,8 +10,6 @@ import androidx.navigation.compose.rememberNavController
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.navigation.AppDestination
 import com.aca56.cahiersortiecodex.navigation.CahierSortieNavHost
-import com.aca56.cahiersortiecodex.ui.components.AppTapToDismissKeyboard
-import com.aca56.cahiersortiecodex.ui.components.ProvideAppKeyboardFocusManager
 import com.aca56.cahiersortiecodex.ui.components.ProvideUserInteractionNotifier
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -57,10 +55,6 @@ fun CahierSortieApp(
         }
     }
     ProvideUserInteractionNotifier(onUserInteraction = onUserInteraction) {
-        ProvideAppKeyboardFocusManager {
-            AppTapToDismissKeyboard {
-                CahierSortieNavHost(navController = navController)
-            }
-        }
+        CahierSortieNavHost(navController = navController)
     }
 }

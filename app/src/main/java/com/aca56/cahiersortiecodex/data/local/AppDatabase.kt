@@ -7,12 +7,14 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.aca56.cahiersortiecodex.data.local.converter.RemarkStatusConverter
 import com.aca56.cahiersortiecodex.data.local.converter.SessionStatusConverter
 import com.aca56.cahiersortiecodex.data.local.dao.BoatDao
 import com.aca56.cahiersortiecodex.data.local.dao.BoatPhotoDao
 import com.aca56.cahiersortiecodex.data.local.dao.BoatRepairDao
 import com.aca56.cahiersortiecodex.data.local.dao.DestinationDao
 import com.aca56.cahiersortiecodex.data.local.dao.RemarkDao
+import com.aca56.cahiersortiecodex.data.local.dao.RepairUpdateDao
 import com.aca56.cahiersortiecodex.data.local.dao.RowerDao
 import com.aca56.cahiersortiecodex.data.local.dao.SessionDao
 import com.aca56.cahiersortiecodex.data.local.dao.SessionRowerDao
@@ -21,6 +23,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatRepairEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
+import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
@@ -35,11 +38,12 @@ import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
         SessionEntity::class,
         SessionRowerEntity::class,
         RemarkEntity::class,
+        RepairUpdateEntity::class,
     ],
-    version = 3,
+    version = 5,
     exportSchema = false,
 )
-@TypeConverters(SessionStatusConverter::class)
+@TypeConverters(SessionStatusConverter::class, RemarkStatusConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun rowerDao(): RowerDao
     abstract fun boatDao(): BoatDao
@@ -49,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sessionDao(): SessionDao
     abstract fun sessionRowerDao(): SessionRowerDao
     abstract fun remarkDao(): RemarkDao
+    abstract fun repairUpdateDao(): RepairUpdateDao
 
     fun resetAllData() {
         val database = openHelper.writableDatabase
@@ -56,6 +61,7 @@ abstract class AppDatabase : RoomDatabase() {
         database.beginTransaction()
         try {
             database.execSQL("DELETE FROM remarks")
+            database.execSQL("DELETE FROM repair_updates")
             database.execSQL("DELETE FROM boat_photos")
             database.execSQL("DELETE FROM boat_repairs")
             database.execSQL("DELETE FROM session_rowers")
@@ -88,7 +94,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     DATABASE_NAME,
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -239,6 +245,31 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent(),
                 )
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_boat_photos_boatId ON boat_photos(boatId)")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE remarks ADD COLUMN status TEXT NOT NULL DEFAULT 'NORMAL'")
+                database.execSQL("ALTER TABLE remarks ADD COLUMN photoPath TEXT")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS repair_updates (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        remarkId INTEGER NOT NULL,
+                        content TEXT NOT NULL,
+                        photoPath TEXT,
+                        createdAt TEXT NOT NULL,
+                        FOREIGN KEY(remarkId) REFERENCES remarks(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_repair_updates_remarkId ON repair_updates(remarkId)")
             }
         }
     }

@@ -17,11 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -44,10 +43,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
@@ -65,7 +64,7 @@ fun BoatsRoute(
     val viewModel: BoatsViewModel = viewModel(
         factory = BoatsViewModel.factory(
             boatRepository = appContainer.boatRepository,
-            boatRepairRepository = appContainer.boatRepairRepository,
+            remarkRepository = appContainer.remarkRepository,
             sessionRepository = appContainer.sessionRepository,
         ),
     )
@@ -202,6 +201,7 @@ fun BoatDetailRoute(
     onOpenSession: (Long) -> Unit,
     onOpenFullHistory: (Long) -> Unit,
     onOpenBoatRemarks: (Long) -> Unit,
+    onAddBoatRemark: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val appContainer = (context.applicationContext as CahierSortieApplication).appContainer
@@ -210,7 +210,6 @@ fun BoatDetailRoute(
         factory = BoatDetailViewModel.factory(
             boatId = boatId,
             boatRepository = appContainer.boatRepository,
-            boatRepairRepository = appContainer.boatRepairRepository,
             boatPhotoRepository = appContainer.boatPhotoRepository,
             remarkRepository = appContainer.remarkRepository,
             sessionRepository = appContainer.sessionRepository,
@@ -242,12 +241,9 @@ fun BoatDetailRoute(
         onRiggingPointeChanged = viewModel::onRiggingPointeChanged,
         onYearChanged = viewModel::onYearChanged,
         onNotesChanged = viewModel::onNotesChanged,
-        onRepairIssueChanged = viewModel::onRepairIssueChanged,
         onStartEditing = viewModel::startEditing,
         onCancelEditing = viewModel::cancelEditing,
         onSaveBoat = viewModel::saveBoat,
-        onAddRepairIssue = viewModel::addRepairIssue,
-        onMarkRepairAsResolved = viewModel::markRepairAsResolved,
         onDeletePhoto = viewModel::deletePhoto,
         onAddPhoto = {
             photoPickerLauncher.launch(arrayOf("image/*"))
@@ -255,6 +251,7 @@ fun BoatDetailRoute(
         onOpenSession = onOpenSession,
         onOpenFullHistory = onOpenFullHistory,
         onOpenBoatRemarks = onOpenBoatRemarks,
+        onAddBoatRemark = onAddBoatRemark,
         onDismissMessage = viewModel::clearMessage,
     )
 }
@@ -274,17 +271,15 @@ fun BoatDetailScreen(
     onRiggingPointeChanged: (Boolean) -> Unit,
     onYearChanged: (String) -> Unit,
     onNotesChanged: (String) -> Unit,
-    onRepairIssueChanged: (String) -> Unit,
     onStartEditing: () -> Unit,
     onCancelEditing: () -> Unit,
     onSaveBoat: () -> Unit,
-    onAddRepairIssue: () -> Unit,
-    onMarkRepairAsResolved: (Long, String) -> Unit,
     onDeletePhoto: (Long) -> Unit,
     onAddPhoto: () -> Unit,
     onOpenSession: (Long) -> Unit,
     onOpenFullHistory: (Long) -> Unit,
     onOpenBoatRemarks: (Long) -> Unit,
+    onAddBoatRemark: (Long) -> Unit,
     onDismissMessage: () -> Unit,
 ) {
     val dismissKeyboard = rememberDismissKeyboardAction()
@@ -292,27 +287,7 @@ fun BoatDetailScreen(
     val trackedOnSeatCountChanged = rememberInteractionAwareValueChange(onSeatCountChanged)
     val trackedOnYearChanged = rememberInteractionAwareValueChange(onYearChanged)
     val trackedOnNotesChanged = rememberInteractionAwareValueChange(onNotesChanged)
-    val trackedOnRepairIssueChanged = rememberInteractionAwareValueChange(onRepairIssueChanged)
-    var repairDialogForId by remember { mutableStateOf<Long?>(null) }
-    var repairNote by remember { mutableStateOf("") }
     var typeMenuExpanded by remember { mutableStateOf(false) }
-
-    if (repairDialogForId != null) {
-        RepairNoteDialog(
-            note = repairNote,
-            onNoteChanged = { repairNote = it },
-            onConfirm = {
-                dismissKeyboard()
-                onMarkRepairAsResolved(repairDialogForId ?: return@RepairNoteDialog, repairNote)
-                repairDialogForId = null
-                repairNote = ""
-            },
-            onDismiss = {
-                repairDialogForId = null
-                repairNote = ""
-            },
-        )
-    }
 
     Column(
         modifier = Modifier
@@ -378,7 +353,6 @@ fun BoatDetailScreen(
                         value = uiState.boat.seatCount,
                         onValueChange = trackedOnSeatCountChanged,
                         label = "Nombre de places",
-                        keyboardType = KeyboardType.Number,
                     )
                     Box(modifier = Modifier.fillMaxWidth()) {
                         AppBoatSelectorButton(
@@ -407,10 +381,8 @@ fun BoatDetailScreen(
 
                     WeightRangeEditor(
                         boat = uiState.boat,
-                        onWeightSingleChanged = onWeightSingleChanged,
                         onWeightMinChanged = onWeightMinChanged,
                         onWeightMaxChanged = onWeightMaxChanged,
-                        onUseWeightRangeChanged = onUseWeightRangeChanged,
                     )
 
                     RiggingTypeEditor(
@@ -424,7 +396,6 @@ fun BoatDetailScreen(
                         value = uiState.boat.year,
                         onValueChange = trackedOnYearChanged,
                         label = "Année",
-                        keyboardType = KeyboardType.Number,
                     )
                     AppBoatTextField(
                         value = uiState.boat.notes,
@@ -476,88 +447,8 @@ fun BoatDetailScreen(
             }
 
             BoatSectionCard(
-                title = "Réparations",
-                subtitle = "Ajoutez des problèmes, puis marquez-les comme réparés avec une note si besoin.",
-            ) {
-                if (!uiState.boat.hasPersistentBoat) {
-                    Text(
-                        text = "Enregistrez d'abord le bateau pour gérer ses réparations.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    AppBoatTextField(
-                        value = uiState.repairIssueInput,
-                        onValueChange = trackedOnRepairIssueChanged,
-                        label = "Nouveau problème",
-                    )
-                    Button(
-                        onClick = {
-                            dismissKeyboard()
-                            onAddRepairIssue()
-                        },
-                        enabled = uiState.canAddRepair,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Ajouter un problème")
-                    }
-
-                    if (uiState.boat.repairs.isEmpty()) {
-                        Text(
-                            text = "Aucune réparation enregistrée pour ce bateau.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        uiState.boat.repairs.forEach { repair ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Text(
-                                        text = repair.issue,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        text = "Signalé le ${formatDateForDisplay(repair.createdAt)}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    if (repair.isResolved) {
-                                        Text(
-                                            text = "Réparé le ${formatDateForDisplay(repair.repairedAt.orEmpty())}",
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                        if (repair.repairNote.isNotBlank()) {
-                                            Text("Note : ${repair.repairNote}")
-                                        }
-                                    } else {
-                                        OutlinedButton(
-                                            onClick = {
-                                                dismissKeyboard()
-                                                repairDialogForId = repair.id
-                                                repairNote = ""
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Text("Marquer comme réparé")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            BoatSectionCard(
-                title = "Remarques",
-                subtitle = "Seules les remarques liées à ce bateau sont affichées ici.",
+                title = "Remarques et maintenance",
+                subtitle = "Affiche les 3 dernières remarques liées à ce bateau, y compris la maintenance.",
             ) {
                 if (!uiState.boat.hasPersistentBoat) {
                     Text(
@@ -569,12 +460,25 @@ fun BoatDetailScreen(
                         text = "Aucune remarque liée à ce bateau.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Button(
+                        onClick = {
+                            dismissKeyboard()
+                            onAddBoatRemark(uiState.boat.id)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Ajouter une remarque")
+                    }
                 } else {
                     uiState.boat.remarks.take(3).forEach { remark ->
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            color = if (remark.status == RemarkStatus.REPAIR_NEEDED) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerLowest
+                            },
                         ) {
                             Column(
                                 modifier = Modifier
@@ -588,8 +492,34 @@ fun BoatDetailScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(remark.content)
+                                Text(
+                                    text = when (remark.status) {
+                                        RemarkStatus.NORMAL -> "Remarque normale"
+                                        RemarkStatus.REPAIR_NEEDED -> "Réparation nécessaire"
+                                        RemarkStatus.REPAIRED -> "Réparée"
+                                    },
+                                    color = when (remark.status) {
+                                        RemarkStatus.NORMAL -> MaterialTheme.colorScheme.primary
+                                        RemarkStatus.REPAIR_NEEDED -> MaterialTheme.colorScheme.error
+                                        RemarkStatus.REPAIRED -> MaterialTheme.colorScheme.tertiary
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                remark.photoPath?.let { filePath ->
+                                    BoatPhotoPreview(filePath)
+                                }
                             }
                         }
+                    }
+                    Button(
+                        onClick = {
+                            dismissKeyboard()
+                            onAddBoatRemark(uiState.boat.id)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Ajouter une remarque")
                     }
                     OutlinedButton(
                         onClick = {
@@ -598,7 +528,7 @@ fun BoatDetailScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Afficher plus")
+                        Text("Voir toutes les remarques")
                     }
                 }
             }
@@ -764,7 +694,6 @@ private fun AppBoatTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    keyboardType: KeyboardType = KeyboardType.Text,
     minLines: Int = 1,
 ) {
     OutlinedTextField(
@@ -772,7 +701,6 @@ private fun AppBoatTextField(
         onValueChange = onValueChange,
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         keyboardActions = rememberDoneKeyboardActions(),
         singleLine = minLines == 1,
         minLines = minLines,
@@ -830,43 +758,88 @@ private fun BoatInfoSheet(
 @Composable
 private fun WeightRangeEditor(
     boat: BoatDetailUi,
-    onWeightSingleChanged: (String) -> Unit,
     onWeightMinChanged: (String) -> Unit,
     onWeightMaxChanged: (String) -> Unit,
-    onUseWeightRangeChanged: (Boolean) -> Unit,
 ) {
+    var minExpanded by remember { mutableStateOf(false) }
+    var maxExpanded by remember { mutableStateOf(false) }
+    val weightOptions = (30..120 step 5).map { it.toString() }
+
     Text("Poids", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text(
+        text = "Choisissez un minimum et un maximum par pas de 5 kg.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Checkbox(
-            checked = boat.useWeightRange,
-            onCheckedChange = onUseWeightRangeChanged,
-        )
-        Text(if (boat.useWeightRange) "Utiliser une plage" else "Utiliser une seule valeur")
+        Box(modifier = Modifier.weight(1f)) {
+            AppBoatSelectorButton(
+                label = "Poids min",
+                value = boat.weightMinValue.ifBlank { "Choisir" },
+                onClick = { minExpanded = true },
+            )
+            DropdownMenu(
+                expanded = minExpanded,
+                onDismissRequest = { minExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Aucun") },
+                    onClick = {
+                        onWeightMinChanged("")
+                        minExpanded = false
+                    },
+                )
+                weightOptions.forEach { value ->
+                    DropdownMenuItem(
+                        text = { Text("$value kg") },
+                        onClick = {
+                            onWeightMinChanged(value)
+                            minExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+        Box(modifier = Modifier.weight(1f)) {
+            AppBoatSelectorButton(
+                label = "Poids max",
+                value = boat.weightMaxValue.ifBlank { "Choisir" },
+                onClick = { maxExpanded = true },
+            )
+            DropdownMenu(
+                expanded = maxExpanded,
+                onDismissRequest = { maxExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Aucun") },
+                    onClick = {
+                        onWeightMaxChanged("")
+                        maxExpanded = false
+                    },
+                )
+                weightOptions.forEach { value ->
+                    DropdownMenuItem(
+                        text = { Text("$value kg") },
+                        onClick = {
+                            onWeightMaxChanged(value)
+                            maxExpanded = false
+                        },
+                    )
+                }
+            }
+        }
     }
-
-    if (boat.useWeightRange) {
-        AppBoatTextField(
-            value = boat.weightMinValue,
-            onValueChange = onWeightMinChanged,
-            label = "Poids min (kg)",
-            keyboardType = KeyboardType.Number,
-        )
-        AppBoatTextField(
-            value = boat.weightMaxValue,
-            onValueChange = onWeightMaxChanged,
-            label = "Poids max (kg)",
-            keyboardType = KeyboardType.Number,
-        )
-    } else {
-        AppBoatTextField(
-            value = boat.weightSingleValue,
-            onValueChange = onWeightSingleChanged,
-            label = "Poids (kg)",
-            keyboardType = KeyboardType.Number,
+    if (
+        boat.weightMinValue.toIntOrNull() != null &&
+        boat.weightMaxValue.toIntOrNull() != null &&
+        boat.weightMinValue.toInt() > boat.weightMaxValue.toInt()
+    ) {
+        Text(
+            text = "Le poids minimum doit être inférieur ou égal au poids maximum.",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
@@ -917,12 +890,23 @@ private fun BoatStatusBadge(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = status.label(),
-            color = contentColor,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(contentColor),
+            )
+            Text(
+                text = status.label(),
+                color = contentColor,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 
@@ -959,43 +943,12 @@ private fun BoatPhotoPreview(
     }
 }
 
-@Composable
-private fun RepairNoteDialog(
-    note: String,
-    onNoteChanged: (String) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Clôturer la réparation") },
-        text = {
-            AppBoatTextField(
-                value = note,
-                onValueChange = onNoteChanged,
-                label = "Note de réparation (optionnelle)",
-                minLines = 3,
-            )
-        },
-        confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("Valider")
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Annuler")
-            }
-        },
-    )
-}
-
 private val BoatTypeOptions = listOf("1x", "2-", "2x", "2+", "4-", "4x", "4+", "4x+", "4Yx+", "4Yx-", "8x+", "8+")
 
 private fun BoatStatusUi.label(): String {
     return when (this) {
         BoatStatusUi.AVAILABLE -> "Disponible"
-        BoatStatusUi.IN_USE -> "En cours d'utilisation"
+        BoatStatusUi.IN_USE -> "Déjà utilisé"
         BoatStatusUi.IN_REPAIR -> "En réparation"
     }
 }

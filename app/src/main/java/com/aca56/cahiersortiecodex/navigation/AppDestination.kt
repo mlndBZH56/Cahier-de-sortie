@@ -32,12 +32,20 @@ sealed class AppDestination(
     data object EditSession : AppDestination("edit_session/{sessionId}", "Modifier la session") {
         fun createRoute(sessionId: Long): String = "edit_session/$sessionId"
     }
-    data object Remarks : AppDestination("remarks?boatId={boatId}", "Remarques") {
-        fun createRoute(boatId: Long? = null): String {
-            return if (boatId == null) {
-                "remarks"
-            } else {
-                "remarks?boatId=$boatId"
+    data object Remarks : AppDestination("remarks?boatId={boatId}&autoAdd={autoAdd}", "Remarques") {
+        fun createRoute(boatId: Long? = null, autoAdd: Boolean = false): String {
+            val boatPart = boatId?.let { "boatId=$it" } ?: ""
+            val autoAddPart = "autoAdd=$autoAdd"
+            return buildString {
+                append("remarks")
+                val queryParts = listOfNotNull(
+                    boatPart.takeIf { it.isNotBlank() },
+                    autoAddPart,
+                )
+                if (queryParts.isNotEmpty()) {
+                    append("?")
+                    append(queryParts.joinToString("&"))
+                }
             }
         }
     }

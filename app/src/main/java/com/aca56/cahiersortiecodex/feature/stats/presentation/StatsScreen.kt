@@ -122,6 +122,20 @@ fun StatsScreen(
             StatsOverviewCard(globalStats = uiState.globalStats)
 
             Text(
+                text = "Statistiques des bateaux",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            if (uiState.boatStats.isEmpty()) {
+                EmptyStatsMessage("Aucune statistique bateau disponible pour les filtres actuels.")
+            } else {
+                uiState.boatStats.forEach { stat ->
+                    BoatStatsCard(stat = stat)
+                }
+            }
+
+            Text(
                 text = "Statistiques des rameurs",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
@@ -135,20 +149,6 @@ fun StatsScreen(
                         stat = stat,
                         onOpenSession = onOpenSession,
                     )
-                }
-            }
-
-            Text(
-                text = "Statistiques des bateaux",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            if (uiState.boatStats.isEmpty()) {
-                EmptyStatsMessage("Aucune statistique bateau disponible pour les filtres actuels.")
-            } else {
-                uiState.boatStats.forEach { stat ->
-                    BoatStatsCard(stat = stat)
                 }
             }
         }

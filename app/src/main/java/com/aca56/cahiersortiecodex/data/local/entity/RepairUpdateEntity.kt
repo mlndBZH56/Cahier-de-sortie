@@ -5,30 +5,23 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class RemarkStatus {
-    NORMAL,
-    REPAIR_NEEDED,
-    REPAIRED,
-}
-
 @Entity(
-    tableName = "remarks",
+    tableName = "repair_updates",
     foreignKeys = [
         ForeignKey(
-            entity = BoatEntity::class,
+            entity = RemarkEntity::class,
             parentColumns = ["id"],
-            childColumns = ["boatId"],
-            onDelete = ForeignKey.SET_NULL,
+            childColumns = ["remarkId"],
+            onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index(value = ["boatId"])],
+    indices = [Index(value = ["remarkId"])],
 )
-data class RemarkEntity(
+data class RepairUpdateEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val boatId: Long?,
+    val remarkId: Long,
     val content: String,
-    val date: String,
-    val status: RemarkStatus = RemarkStatus.NORMAL,
     val photoPath: String? = null,
+    val createdAt: String,
 )

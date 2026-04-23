@@ -45,20 +45,15 @@ fun FeedbackDialog(
     } else {
         MaterialTheme.colorScheme.primary
     }
-    val textColor = if (type == FeedbackDialogType.ERROR) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.primary
-    }
     val containerColor = if (type == FeedbackDialogType.ERROR) {
         MaterialTheme.colorScheme.errorContainer
     } else {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.secondaryContainer
     }
     val contentColor = if (type == FeedbackDialogType.ERROR) {
         MaterialTheme.colorScheme.onErrorContainer
     } else {
-        MaterialTheme.colorScheme.onPrimaryContainer
+        MaterialTheme.colorScheme.onSecondaryContainer
     }
 
     AlertDialog(
@@ -75,13 +70,13 @@ fun FeedbackDialog(
         text = {
             Text(
                 text = message,
-                color = textColor,
+                color = contentColor,
             )
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = "Fermer",
+                    text = "OK",
                     color = titleColor,
                 )
             }

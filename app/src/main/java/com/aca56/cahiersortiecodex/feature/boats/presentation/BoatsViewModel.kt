@@ -6,13 +6,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
-import com.aca56.cahiersortiecodex.data.local.entity.BoatRepairEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
 import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
-import com.aca56.cahiersortiecodex.data.repository.BoatRepairRepository
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
@@ -47,17 +46,6 @@ data class BoatSessionSummaryUi(
     val rowers: List<String>,
 )
 
-data class BoatRepairUi(
-    val id: Long,
-    val issue: String,
-    val createdAt: String,
-    val repairedAt: String?,
-    val repairNote: String,
-) {
-    val isResolved: Boolean
-        get() = !repairedAt.isNullOrBlank()
-}
-
 data class BoatPhotoUi(
     val id: Long,
     val filePath: String,
@@ -78,7 +66,6 @@ data class BoatDetailUi(
     val year: String = "",
     val notes: String = "",
     val status: BoatStatusUi = BoatStatusUi.AVAILABLE,
-    val repairs: List<BoatRepairUi> = emptyList(),
     val remarks: List<RemarkEntity> = emptyList(),
     val photos: List<BoatPhotoUi> = emptyList(),
     val recentSessions: List<BoatSessionSummaryUi> = emptyList(),
@@ -120,20 +107,16 @@ data class BoatDetailUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val boat: BoatDetailUi = BoatDetailUi(),
-    val repairIssueInput: String = "",
     val message: String? = null,
     val messageType: FeedbackDialogType? = null,
 ) {
     val canSave: Boolean
         get() = boat.name.isNotBlank() && (boat.seatCount.toIntOrNull() ?: 0) > 0
-
-    val canAddRepair: Boolean
-        get() = boat.hasPersistentBoat && repairIssueInput.isNotBlank()
 }
 
 class BoatsViewModel(
     private val boatRepository: BoatRepository,
-    private val boatRepairRepository: BoatRepairRepository,
+    private val remarkRepository: RemarkRepository,
     private val sessionRepository: SessionRepository,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(BoatsUiState())
@@ -143,16 +126,16 @@ class BoatsViewModel(
         viewModelScope.launch {
             combine(
                 boatRepository.observeBoats(),
-                boatRepairRepository.observeRepairs(),
+                remarkRepository.observeRemarks(),
                 sessionRepository.observeSessionsWithDetailsByStatus(SessionStatus.ONGOING),
-            ) { boats, repairs, ongoingSessions ->
+            ) { boats, remarks, ongoingSessions ->
                 boats.map { boat ->
                     BoatListItemUi(
                         id = boat.id,
                         name = boat.name,
                         status = resolveBoatStatus(
                             boatId = boat.id,
-                            repairs = repairs,
+                            remarks = remarks,
                             ongoingSessions = ongoingSessions,
                         ),
                     )
@@ -179,7 +162,7 @@ class BoatsViewModel(
     companion object {
         fun factory(
             boatRepository: BoatRepository,
-            boatRepairRepository: BoatRepairRepository,
+            remarkRepository: RemarkRepository,
             sessionRepository: SessionRepository,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
@@ -187,7 +170,7 @@ class BoatsViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return BoatsViewModel(
                         boatRepository = boatRepository,
-                        boatRepairRepository = boatRepairRepository,
+                        remarkRepository = remarkRepository,
                         sessionRepository = sessionRepository,
                     ) as T
                 }
@@ -199,7 +182,6 @@ class BoatsViewModel(
 class BoatDetailViewModel(
     private val boatId: Long?,
     private val boatRepository: BoatRepository,
-    private val boatRepairRepository: BoatRepairRepository,
     private val boatPhotoRepository: BoatPhotoRepository,
     private val remarkRepository: RemarkRepository,
     private val sessionRepository: SessionRepository,
@@ -278,10 +260,6 @@ class BoatDetailViewModel(
         updateBoatFields { copy(notes = value) }
     }
 
-    fun onRepairIssueChanged(value: String) {
-        uiStateMutable.update { it.copy(repairIssueInput = value) }
-    }
-
     fun startEditing() {
         uiStateMutable.update { it.copy(isEditMode = true, message = null, messageType = null) }
     }
@@ -298,6 +276,8 @@ class BoatDetailViewModel(
     fun saveBoat() {
         val state = uiState.value
         val seatCount = state.boat.seatCount.toIntOrNull()
+        val minWeight = state.boat.weightMinValue.toIntOrNull()
+        val maxWeight = state.boat.weightMaxValue.toIntOrNull()
         val weightRange = buildWeightRangeValue(state.boat)
 
         when {
@@ -307,6 +287,15 @@ class BoatDetailViewModel(
             }
             seatCount == null || seatCount <= 0 -> {
                 showError("Veuillez saisir un nombre de places valide.")
+                return
+            }
+            (state.boat.weightMinValue.isNotBlank() && state.boat.weightMaxValue.isBlank()) ||
+                (state.boat.weightMinValue.isBlank() && state.boat.weightMaxValue.isNotBlank()) -> {
+                showError("Veuillez choisir un poids minimum et un poids maximum.")
+                return
+            }
+            minWeight != null && maxWeight != null && minWeight > maxWeight -> {
+                showError("Le poids minimum doit être inférieur ou égal au poids maximum.")
                 return
             }
         }
@@ -348,74 +337,6 @@ class BoatDetailViewModel(
                 }
             }.onFailure {
                 showError("Impossible d'enregistrer le bateau.", isSaving = false)
-            }
-        }
-    }
-
-    fun addRepairIssue() {
-        val state = uiState.value
-        val currentBoatId = state.boat.id
-        if (currentBoatId == 0L) {
-            showError("Enregistrez d'abord le bateau avant d'ajouter une réparation.")
-            return
-        }
-        val issue = state.repairIssueInput.trim()
-        if (issue.isBlank()) {
-            showError("Veuillez saisir un problème avant de l'ajouter.")
-            return
-        }
-
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    boatRepairRepository.saveRepair(
-                        BoatRepairEntity(
-                            boatId = currentBoatId,
-                            issue = issue,
-                            createdAt = currentStorageDate(),
-                        ),
-                    )
-                }
-            }.onSuccess {
-                uiStateMutable.update {
-                    it.copy(
-                        repairIssueInput = "",
-                        message = "Problème de réparation ajouté.",
-                        messageType = FeedbackDialogType.SUCCESS,
-                    )
-                }
-            }.onFailure {
-                showError("Impossible d'ajouter la réparation.")
-            }
-        }
-    }
-
-    fun markRepairAsResolved(repairId: Long, repairNote: String) {
-        val repair = uiState.value.boat.repairs.firstOrNull { it.id == repairId } ?: return
-
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    boatRepairRepository.updateRepair(
-                        BoatRepairEntity(
-                            id = repair.id,
-                            boatId = uiState.value.boat.id,
-                            issue = repair.issue,
-                            createdAt = repair.createdAt,
-                            repairedAt = currentStorageDate(),
-                            repairNote = repairNote.trim().ifBlank { null },
-                        ),
-                    )
-                }
-            }.onSuccess {
-                uiStateMutable.update {
-                    it.copy(
-                        message = "Réparation marquée comme terminée.",
-                        messageType = FeedbackDialogType.SUCCESS,
-                    )
-                }
-            }.onFailure {
-                showError("Impossible de clôturer cette réparation.")
             }
         }
     }
@@ -488,20 +409,17 @@ class BoatDetailViewModel(
         viewModelScope.launch {
             combine(
                 boatRepository.observeBoat(observedBoatId),
-                boatRepairRepository.observeRepairsByBoat(observedBoatId),
                 boatPhotoRepository.observePhotosByBoat(observedBoatId),
                 remarkRepository.observeRemarksByBoat(observedBoatId),
                 sessionRepository.observeSessionsWithDetails(),
                 sessionRepository.observeSessionsWithDetailsByStatus(SessionStatus.ONGOING),
             ) { values ->
                 val boat = values[0] as BoatEntity?
-                val repairs = values[1] as List<BoatRepairEntity>
-                val photos = values[2] as List<BoatPhotoEntity>
-                val remarks = values[3] as List<RemarkEntity>
-                val sessions = values[4] as List<SessionWithDetails>
-                val ongoingSessions = values[5] as List<SessionWithDetails>
+                val photos = values[1] as List<BoatPhotoEntity>
+                val remarks = values[2] as List<RemarkEntity>
+                val sessions = values[3] as List<SessionWithDetails>
+                val ongoingSessions = values[4] as List<SessionWithDetails>
                 boat?.toDetailUi(
-                    repairs = repairs,
                     photos = photos,
                     remarks = remarks,
                     sessions = sessions,
@@ -525,13 +443,12 @@ class BoatDetailViewModel(
     }
 
     private fun BoatEntity.toDetailUi(
-        repairs: List<BoatRepairEntity>,
         photos: List<BoatPhotoEntity>,
         remarks: List<RemarkEntity>,
         sessions: List<SessionWithDetails>,
         ongoingSessions: List<SessionWithDetails>,
     ): BoatDetailUi {
-        val status = resolveBoatStatus(id, repairs, ongoingSessions)
+        val status = resolveBoatStatus(id, remarks, ongoingSessions)
         val recentSessions = sessions
             .filter { it.boat.id == id }
             .sortedWith(
@@ -561,16 +478,7 @@ class BoatDetailViewModel(
             year = year?.toString().orEmpty(),
             notes = notes,
             status = status,
-            repairs = repairs.map { repair ->
-                BoatRepairUi(
-                    id = repair.id,
-                    issue = repair.issue,
-                    createdAt = repair.createdAt,
-                    repairedAt = repair.repairedAt,
-                    repairNote = repair.repairNote.orEmpty(),
-                )
-            },
-            remarks = remarks,
+            remarks = remarks.sortedWith(compareBy<RemarkEntity> { it.status.priority() }.thenByDescending { it.date }.thenByDescending { it.id }),
             photos = photos.map { photo ->
                 BoatPhotoUi(
                     id = photo.id,
@@ -606,7 +514,6 @@ class BoatDetailViewModel(
         fun factory(
             boatId: Long?,
             boatRepository: BoatRepository,
-            boatRepairRepository: BoatRepairRepository,
             boatPhotoRepository: BoatPhotoRepository,
             remarkRepository: RemarkRepository,
             sessionRepository: SessionRepository,
@@ -618,7 +525,6 @@ class BoatDetailViewModel(
                     return BoatDetailViewModel(
                         boatId = boatId,
                         boatRepository = boatRepository,
-                        boatRepairRepository = boatRepairRepository,
                         boatPhotoRepository = boatPhotoRepository,
                         remarkRepository = remarkRepository,
                         sessionRepository = sessionRepository,
@@ -630,12 +536,7 @@ class BoatDetailViewModel(
     }
 }
 
-private fun sanitizeWeightValue(value: String): String {
-    val digits = value.filter(Char::isDigit)
-    val numericValue = digits.toIntOrNull() ?: return digits
-    val stepped = (numericValue / 5) * 5
-    return stepped.toString()
-}
+private fun sanitizeWeightValue(value: String): String = value.filter(Char::isDigit)
 
 private fun parseWeightSingleValue(weightRange: String): String {
     val trimmed = weightRange.trim()
@@ -666,8 +567,10 @@ private fun parseWeightMaxValue(weightRange: String): String {
 
 private fun buildWeightRangeValue(boat: BoatDetailUi): String {
     return when {
-        boat.useWeightRange && boat.weightMinValue.isNotBlank() && boat.weightMaxValue.isNotBlank() ->
+        boat.weightMinValue.isNotBlank() && boat.weightMaxValue.isNotBlank() ->
             "${boat.weightMinValue}-${boat.weightMaxValue} kg"
+        boat.weightMinValue.isNotBlank() ->
+            "${boat.weightMinValue} kg"
         boat.weightSingleValue.isNotBlank() ->
             "${boat.weightSingleValue} kg"
         else -> ""
@@ -687,10 +590,10 @@ private fun currentStorageDate(): String {
 
 private fun resolveBoatStatus(
     boatId: Long,
-    repairs: List<BoatRepairEntity>,
+    remarks: List<RemarkEntity>,
     ongoingSessions: List<SessionWithDetails>,
 ): BoatStatusUi {
-    val hasOpenRepair = repairs.any { it.boatId == boatId && it.repairedAt.isNullOrBlank() }
+    val hasOpenRepair = remarks.any { it.boatId == boatId && it.status == RemarkStatus.REPAIR_NEEDED }
     if (hasOpenRepair) {
         return BoatStatusUi.IN_REPAIR
     }
@@ -700,5 +603,13 @@ private fun resolveBoatStatus(
         BoatStatusUi.IN_USE
     } else {
         BoatStatusUi.AVAILABLE
+    }
+}
+
+private fun RemarkStatus.priority(): Int {
+    return when (this) {
+        RemarkStatus.REPAIR_NEEDED -> 0
+        RemarkStatus.REPAIRED -> 1
+        RemarkStatus.NORMAL -> 2
     }
 }

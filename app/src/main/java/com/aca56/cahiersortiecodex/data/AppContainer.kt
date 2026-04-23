@@ -12,20 +12,20 @@ import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
 import com.aca56.cahiersortiecodex.data.local.AppDatabase
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
 import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
-import com.aca56.cahiersortiecodex.data.repository.BoatRepairRepository
 import com.aca56.cahiersortiecodex.data.security.PinCodeStore
 import com.aca56.cahiersortiecodex.data.settings.AppIconManager
 import com.aca56.cahiersortiecodex.data.settings.AppPreferencesStore
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.DestinationRepository
 import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
+import com.aca56.cahiersortiecodex.data.repository.RepairUpdateRepository
 import com.aca56.cahiersortiecodex.data.repository.RowerRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultBoatPhotoRepository
-import com.aca56.cahiersortiecodex.data.repository.impl.DefaultBoatRepairRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultBoatRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultDestinationRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultRemarkRepository
+import com.aca56.cahiersortiecodex.data.repository.impl.DefaultRepairUpdateRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultRowerRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultSessionRepository
 
@@ -61,10 +61,6 @@ class AppContainer(context: Context) {
         DefaultDestinationRepository(database.destinationDao())
     }
 
-    val boatRepairRepository: BoatRepairRepository by lazy {
-        DefaultBoatRepairRepository(database.boatRepairDao())
-    }
-
     val boatPhotoRepository: BoatPhotoRepository by lazy {
         DefaultBoatPhotoRepository(database.boatPhotoDao())
     }
@@ -78,6 +74,10 @@ class AppContainer(context: Context) {
 
     val remarkRepository: RemarkRepository by lazy {
         DefaultRemarkRepository(database.remarkDao())
+    }
+
+    val repairUpdateRepository: RepairUpdateRepository by lazy {
+        DefaultRepairUpdateRepository(database.repairUpdateDao())
     }
 
     fun resetAllAppData() {

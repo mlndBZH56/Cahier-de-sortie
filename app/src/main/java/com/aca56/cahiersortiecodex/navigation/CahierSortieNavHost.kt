@@ -172,6 +172,12 @@ fun CahierSortieNavHost(navController: NavHostController) {
                             restoreState = false
                         }
                     },
+                    onAddBoatRemark = { selectedBoatId ->
+                        navController.navigate(AppDestination.Remarks.createRoute(selectedBoatId, autoAdd = true)) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
                 )
             }
             composable(
@@ -288,12 +294,18 @@ fun CahierSortieNavHost(navController: NavHostController) {
                         type = NavType.LongType
                         defaultValue = -1L
                     },
+                    navArgument("autoAdd") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
                 ),
             ) { backStackEntry ->
                 val initialBoatId = backStackEntry.arguments?.getLong("boatId")?.takeIf { it != -1L }
+                val autoAdd = backStackEntry.arguments?.getBoolean("autoAdd") ?: false
                 RemarksRoute(
                     contentPadding = innerPadding,
                     initialBoatId = initialBoatId,
+                    autoStartEditor = autoAdd,
                 )
             }
             composable(AppDestination.Settings.route) {

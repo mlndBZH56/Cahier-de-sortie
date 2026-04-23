@@ -42,6 +42,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.settings.ThemeMode
+import com.aca56.cahiersortiecodex.ui.components.AppTextField
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.ConfirmationDialog
@@ -326,7 +327,6 @@ private fun CreatePinScreen(
     onSaveFirstPin: () -> Unit,
 ) {
     val dismissKeyboard = rememberDismissKeyboardAction()
-    val keyboardActions = rememberDoneKeyboardActions()
     val trackedOnNewPinChanged = rememberInteractionAwareValueChange(onNewPinChanged)
     val trackedOnConfirmPinChanged = rememberInteractionAwareValueChange(onConfirmPinChanged)
 
@@ -335,25 +335,23 @@ private fun CreatePinScreen(
         title = "Créer le code PIN des paramètres",
         description = "Définissez un code PIN lors de la première utilisation pour protéger l'écran des paramètres.",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.newPinInput,
             onValueChange = trackedOnNewPinChanged,
-            label = { Text("Nouveau code PIN") },
+            label = "Nouveau code PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             visualTransformation = PasswordVisualTransformation(),
-            keyboardActions = keyboardActions,
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.confirmPinInput,
             onValueChange = trackedOnConfirmPinChanged,
-            label = { Text("Confirmer le code PIN") },
+            label = "Confirmer le code PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             visualTransformation = PasswordVisualTransformation(),
-            keyboardActions = keyboardActions,
         )
         Button(
             onClick = {
@@ -375,7 +373,6 @@ private fun UnlockSettingsScreen(
     onUnlockSettings: () -> Unit,
 ) {
     val dismissKeyboard = rememberDismissKeyboardAction()
-    val keyboardActions = rememberDoneKeyboardActions()
     val trackedOnPinInputChanged = rememberInteractionAwareValueChange(onPinInputChanged)
 
     SettingsGateScreen(
@@ -383,15 +380,14 @@ private fun UnlockSettingsScreen(
         title = "Paramètres",
         description = "Saisir le code PIN",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.pinInput,
             onValueChange = trackedOnPinInputChanged,
-            label = { Text("Saisir le code PIN") },
+            label = "Saisir le code PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             visualTransformation = PasswordVisualTransformation(),
-            keyboardActions = keyboardActions,
         )
         Button(
             onClick = {
@@ -535,10 +531,10 @@ private fun SettingsContent(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text("Saisissez le code PIN super administrateur pour confirmer définitivement la réinitialisation.")
-                    OutlinedTextField(
+                    AppTextField(
                         value = resetPinInput,
                         onValueChange = { resetPinInput = it.filter(Char::isDigit) },
-                        label = { Text("Code PIN super administrateur") },
+                        label = "Code PIN super administrateur",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -920,17 +916,17 @@ private fun RowerManagementSection(
         ) {
             Text(if (uiState.isWorking) "Traitement..." else "Importer des rameurs")
         }
-        OutlinedTextField(
+        AppTextField(
             value = uiState.rowerManagement.firstNameInput,
             onValueChange = trackedOnFirstNameChanged,
-            label = { Text("Prénom") },
+            label = "Prénom",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.rowerManagement.lastNameInput,
             onValueChange = trackedOnLastNameChanged,
-            label = { Text("Nom") },
+            label = "Nom",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -1009,17 +1005,17 @@ private fun BoatManagementSection(
         ) {
             Text(if (uiState.isWorking) "Traitement..." else "Importer des bateaux (CSV)")
         }
-        OutlinedTextField(
+        AppTextField(
             value = uiState.boatManagement.boatNameInput,
             onValueChange = trackedOnBoatNameChanged,
-            label = { Text("Nom du bateau") },
+            label = "Nom du bateau",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.boatManagement.seatCountInput,
             onValueChange = trackedOnBoatSeatCountChanged,
-            label = { Text("Nombre de places") },
+            label = "Nombre de places",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -1085,18 +1081,14 @@ private fun DestinationManagementSection(
         title = "Gérer les destinations",
         description = "Gérer la liste des destinations utilisées par les sessions.",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.destinationManagement.destinationNameInput,
             onValueChange = trackedOnDestinationNameChanged,
-            label = {
-                Text(
-                    if (uiState.destinationManagement.isEditing) {
+            label = if (uiState.destinationManagement.isEditing) {
                         "Modifier la destination"
                     } else {
                         "Nouvelle destination"
                     },
-                )
-            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -1161,10 +1153,10 @@ private fun AppBehaviorSection(
         title = "Comportement de l'application",
         description = "Contrôler l'inactivité, les animations et le mode d'affichage.",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.inactivityTimeoutMinutesInput,
             onValueChange = trackedOnInactivityTimeoutMinutesChanged,
-            label = { Text("Délai d'inactivité (minutes)") },
+            label = "Délai d'inactivité (minutes)",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -1253,17 +1245,17 @@ private fun NotificationSettingsSection(
         title = "Notifications",
         description = "Configurer la durée d'affichage des fenêtres de retour.",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.successPopupDurationSecondsInput,
             onValueChange = trackedOnSuccessPopupDurationSecondsChanged,
-            label = { Text("Durée de la confirmation (secondes)") },
+            label = "Durée de la confirmation (secondes)",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.errorPopupDurationSecondsInput,
             onValueChange = trackedOnErrorPopupDurationSecondsChanged,
-            label = { Text("Durée de l'erreur (secondes)") },
+            label = "Durée de l'erreur (secondes)",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -1332,24 +1324,24 @@ private fun ThemeColorsSection(
         title = "Configuration du thème",
         description = "Ajuster les couleurs primaire, secondaire et tertiaire de l'application.",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.primaryColorInput,
             onValueChange = trackedOnPrimaryColorChanged,
-            label = { Text("Couleur primaire (#RRGGBB)") },
+            label = "Couleur primaire (#RRGGBB)",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.secondaryColorInput,
             onValueChange = trackedOnSecondaryColorChanged,
-            label = { Text("Couleur secondaire (#RRGGBB)") },
+            label = "Couleur secondaire (#RRGGBB)",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.tertiaryColorInput,
             onValueChange = trackedOnTertiaryColorChanged,
-            label = { Text("Couleur tertiaire (#RRGGBB)") },
+            label = "Couleur tertiaire (#RRGGBB)",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -1388,29 +1380,29 @@ private fun SecuritySection(
         },
     ) {
         if (!uiState.isSuperAdmin) {
-            OutlinedTextField(
+            AppTextField(
                 value = uiState.currentPinInput,
                 onValueChange = trackedOnCurrentPinChanged,
-                label = { Text("PIN actuel") },
+                label = "PIN actuel",
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 visualTransformation = PasswordVisualTransformation(),
             )
         }
-        OutlinedTextField(
+        AppTextField(
             value = uiState.newPinInput,
             onValueChange = trackedOnNewPinChanged,
-            label = { Text("Nouveau PIN") },
+            label = "Nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             visualTransformation = PasswordVisualTransformation(),
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.confirmPinInput,
             onValueChange = trackedOnConfirmPinChanged,
-            label = { Text("Confirmer le PIN") },
+            label = "Confirmer le PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -1446,28 +1438,28 @@ private fun AdvancedAccessSection(
         title = "PIN super administrateur",
         description = "Mettre à jour le code PIN utilisé pour accéder à la section super administrateur.",
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = uiState.superAdminCurrentPinInput,
             onValueChange = trackedOnSuperAdminCurrentPinChanged,
-            label = { Text("PIN actuel") },
+            label = "PIN actuel",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             visualTransformation = PasswordVisualTransformation(),
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.superAdminNewPinInput,
             onValueChange = trackedOnSuperAdminNewPinChanged,
-            label = { Text("Nouveau PIN") },
+            label = "Nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             visualTransformation = PasswordVisualTransformation(),
         )
-        OutlinedTextField(
+        AppTextField(
             value = uiState.superAdminConfirmPinInput,
             onValueChange = trackedOnSuperAdminConfirmPinChanged,
-            label = { Text("Confirmer le nouveau PIN") },
+            label = "Confirmer le nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),

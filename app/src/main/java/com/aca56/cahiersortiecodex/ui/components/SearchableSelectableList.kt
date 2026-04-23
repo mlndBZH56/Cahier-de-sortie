@@ -1,15 +1,16 @@
 package com.aca56.cahiersortiecodex.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 private const val InitialVisibleSelectionCount = 5
@@ -33,10 +36,40 @@ private fun selectionSecondaryLabelColor(
     val colorScheme = MaterialTheme.colorScheme
     if (isSelected) return colorScheme.onPrimaryContainer
     return when {
-        secondaryLabel.contains("reparation", ignoreCase = true) -> colorScheme.error
-        secondaryLabel.contains("cours", ignoreCase = true) -> colorScheme.tertiary
+        secondaryLabel.contains("réparation", ignoreCase = true) ||
+            secondaryLabel.contains("reparation", ignoreCase = true) -> colorScheme.error
+        secondaryLabel.contains("utilis", ignoreCase = true) ||
+            secondaryLabel.contains("cours", ignoreCase = true) -> colorScheme.tertiary
         secondaryLabel.contains("disponible", ignoreCase = true) -> colorScheme.primary
         else -> colorScheme.onSurfaceVariant
+    }
+}
+
+@Composable
+private fun SelectionStatusLabel(
+    text: String,
+    isSelected: Boolean,
+) {
+    val statusColor = selectionSecondaryLabelColor(
+        secondaryLabel = text,
+        isSelected = isSelected,
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Spacer(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(MaterialTheme.shapes.extraLarge)
+                .background(statusColor),
+        )
+        Text(
+            text = text.removePrefix("● ").trim(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = statusColor,
+        )
     }
 }
 
@@ -69,18 +102,16 @@ fun SearchableSelectableList(
     noResultsLabel: String,
     onOptionToggled: (String) -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnSearchQueryChanged = rememberInteractionAwareValueChange(onSearchQueryChanged)
     var showAll by remember(searchQuery, options) { mutableStateOf(false) }
     val visibleOptions = visibleSelectionOptions(options = options, showAll = showAll)
 
-    OutlinedTextField(
+    AppTextField(
         value = searchQuery,
         onValueChange = trackedOnSearchQueryChanged,
-        label = { Text(searchLabel) },
+        label = searchLabel,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        keyboardActions = rememberDoneKeyboardActions(),
     )
 
     if (options.isEmpty()) {
@@ -106,7 +137,6 @@ fun SearchableSelectableList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        dismissKeyboard()
                         onOptionToggled(option.key)
                     }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -129,13 +159,9 @@ fun SearchableSelectableList(
                 )
                 option.secondaryLabel?.takeIf { it.isNotBlank() }?.let { secondaryLabel ->
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
+                    SelectionStatusLabel(
                         text = secondaryLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = selectionSecondaryLabelColor(
-                            secondaryLabel = secondaryLabel,
-                            isSelected = option.key in selectedKeys,
-                        ),
+                        isSelected = option.key in selectedKeys,
                     )
                 }
             }
@@ -144,10 +170,7 @@ fun SearchableSelectableList(
 
     if (options.size > InitialVisibleSelectionCount) {
         TextButton(
-            onClick = {
-                dismissKeyboard()
-                showAll = !showAll
-            },
+            onClick = { showAll = !showAll },
         ) {
             Text(if (showAll) "Voir moins" else "Voir plus")
         }
@@ -165,18 +188,16 @@ fun SearchableSingleSelectList(
     noResultsLabel: String,
     onOptionSelected: (String) -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnSearchQueryChanged = rememberInteractionAwareValueChange(onSearchQueryChanged)
     var showAll by remember(searchQuery, options) { mutableStateOf(false) }
     val visibleOptions = visibleSelectionOptions(options = options, showAll = showAll)
 
-    OutlinedTextField(
+    AppTextField(
         value = searchQuery,
         onValueChange = trackedOnSearchQueryChanged,
-        label = { Text(searchLabel) },
+        label = searchLabel,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        keyboardActions = rememberDoneKeyboardActions(),
     )
 
     if (options.isEmpty()) {
@@ -202,7 +223,6 @@ fun SearchableSingleSelectList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        dismissKeyboard()
                         onOptionSelected(option.key)
                     }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -225,13 +245,9 @@ fun SearchableSingleSelectList(
                 )
                 option.secondaryLabel?.takeIf { it.isNotBlank() }?.let { secondaryLabel ->
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
+                    SelectionStatusLabel(
                         text = secondaryLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = selectionSecondaryLabelColor(
-                            secondaryLabel = secondaryLabel,
-                            isSelected = option.key == selectedKey,
-                        ),
+                        isSelected = option.key == selectedKey,
                     )
                 }
             }
@@ -240,10 +256,7 @@ fun SearchableSingleSelectList(
 
     if (options.size > InitialVisibleSelectionCount) {
         TextButton(
-            onClick = {
-                dismissKeyboard()
-                showAll = !showAll
-            },
+            onClick = { showAll = !showAll },
         ) {
             Text(if (showAll) "Voir moins" else "Voir plus")
         }

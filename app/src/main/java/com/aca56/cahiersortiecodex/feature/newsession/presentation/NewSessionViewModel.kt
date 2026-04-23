@@ -4,16 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
-import com.aca56.cahiersortiecodex.data.local.entity.BoatRepairEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
-import com.aca56.cahiersortiecodex.data.repository.BoatRepairRepository
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.DestinationRepository
+import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
 import com.aca56.cahiersortiecodex.data.repository.RowerRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableOption
@@ -41,16 +42,12 @@ data class SuggestedCrewMemberUi(
     val score: Int,
 )
 
-data class SimilarSessionSuggestionUi(
-    val sessionId: Long,
-    val title: String,
-    val subtitle: String,
-)
-
 data class BoatConflictUi(
     val boatId: Long,
     val boatName: String,
     val activeSessionId: Long,
+    val title: String,
+    val description: String,
 )
 
 private fun normalizeGuestName(value: String): String {
@@ -75,7 +72,6 @@ data class NewSessionUiState(
     val guestRowerName: String = "",
     val guestRowers: List<GuestRowerUi> = emptyList(),
     val suggestedCrew: List<SuggestedCrewMemberUi> = emptyList(),
-    val similarSessionSuggestion: SimilarSessionSuggestionUi? = null,
     val boatConflict: BoatConflictUi? = null,
     val startTime: String = defaultSessionTime(),
     val endTime: String = "",
@@ -138,7 +134,7 @@ data class NewSessionUiState(
 
 class NewSessionViewModel(
     private val boatRepository: BoatRepository,
-    private val boatRepairRepository: BoatRepairRepository,
+    private val remarkRepository: RemarkRepository,
     private val destinationRepository: DestinationRepository,
     private val rowerRepository: RowerRepository,
     private val sessionRepository: SessionRepository,
@@ -211,19 +207,40 @@ class NewSessionViewModel(
     }
 
     fun onBoatSelected(boatId: Long) {
-        val conflict = ongoingSessionsByBoatId[boatId]
         val currentState = uiState.value
+        val status = currentState.boatStatuses[boatId]
+        val ongoingConflict = ongoingSessionsByBoatId[boatId]
+
+        if (status == BoatSelectionStatus.IN_REPAIR && currentState.selectedBoatId != boatId) {
+            uiStateMutable.update {
+                it.copy(
+                    boatConflict = BoatConflictUi(
+                        boatId = boatId,
+                        boatName = currentState.availableBoats.firstOrNull { boat -> boat.id == boatId }?.name.orEmpty(),
+                        activeSessionId = ongoingConflict?.session?.id ?: 0L,
+                        title = "Bateau en réparation",
+                        description = "Ce bateau est actuellement en réparation. Vous devez confirmer avant de l’utiliser.",
+                    ),
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+            return
+        }
+
         if (
-            conflict != null &&
-            currentState.editingSessionId != conflict.session.id &&
+            ongoingConflict != null &&
+            currentState.editingSessionId != ongoingConflict.session.id &&
             currentState.selectedBoatId != boatId
         ) {
             uiStateMutable.update {
                 it.copy(
                     boatConflict = BoatConflictUi(
                         boatId = boatId,
-                        boatName = conflict.boat.name,
-                        activeSessionId = conflict.session.id,
+                        boatName = ongoingConflict.boat.name,
+                        activeSessionId = ongoingConflict.session.id,
+                        title = "Bateau déjà utilisé",
+                        description = "Ce bateau est déjà utilisé dans une sortie en cours. Vous devez confirmer avant de l’utiliser.",
                     ),
                     errorMessage = null,
                     successMessage = null,
@@ -377,39 +394,6 @@ class NewSessionViewModel(
     fun applySuggestedCrewMember(rowerId: Long) {
         if (uiState.value.selectedRowerIds.contains(rowerId)) return
         onRowerChecked(rowerId = rowerId, checked = true)
-    }
-
-    fun applySimilarSessionSuggestion() {
-        val suggestionId = uiState.value.similarSessionSuggestion?.sessionId ?: return
-        val sessionWithDetails = allSessions.firstOrNull { it.session.id == suggestionId } ?: return
-
-        uiStateMutable.update { state ->
-            val baseState = state.copy(
-                selectedBoatId = sessionWithDetails.boat.id,
-                selectedRowerIds = sessionWithDetails.sessionRowers.mapNotNull { it.sessionRower.rowerId }.toSet(),
-                guestRowers = sessionWithDetails.sessionRowers.mapNotNull { participant ->
-                    participant.sessionRower.guestName?.let { guestName ->
-                        GuestRowerUi(
-                            localId = nextGuestId++,
-                            fullName = normalizeGuestName(guestName),
-                        )
-                    }
-                },
-                selectedDestinationId = if (state.isQuickMode) null else sessionWithDetails.destination?.id,
-                isCustomDestination = if (state.isQuickMode) {
-                    false
-                } else {
-                    sessionWithDetails.destination == null && sessionWithDetails.destinationName.isNotBlank()
-                },
-                destination = if (state.isQuickMode) "" else sessionWithDetails.destinationName,
-                errorMessage = null,
-                successMessage = null,
-                savedSessionStatus = null,
-                boatConflict = null,
-            )
-            baseState.withSeatValidation()
-        }
-        refreshSuggestions()
     }
 
     fun addGuestRower() {
@@ -809,14 +793,14 @@ class NewSessionViewModel(
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 boatRepository.observeBoats(),
-                boatRepairRepository.observeRepairs(),
+                remarkRepository.observeRemarks(),
                 sessionRepository.observeSessionsWithDetailsByStatus(SessionStatus.ONGOING),
-            ) { boats, repairs, ongoingSessions ->
+            ) { boats, remarks, ongoingSessions ->
                 ongoingSessionsByBoatId = ongoingSessions.associateBy { it.boat.id }
                 boats.associate { boat ->
                     boat.id to resolveBoatSelectionStatus(
                         boatId = boat.id,
-                        repairs = repairs,
+                        remarks = remarks,
                         ongoingSessions = ongoingSessions,
                     )
                 }
@@ -844,7 +828,6 @@ class NewSessionViewModel(
         uiStateMutable.update { state ->
             state.copy(
                 suggestedCrew = buildSuggestedCrew(state, history),
-                similarSessionSuggestion = buildSimilarSessionSuggestion(state, history),
             )
         }
     }
@@ -890,39 +873,15 @@ class NewSessionViewModel(
                     rowerId = rower.id,
                     fullName = fullName,
                     reason = when {
-                        boatSuggestionUsed && crewSuggestionUsed -> "Souvent utilise avec ce bateau et cet equipage"
-                        boatSuggestionUsed -> "Souvent utilise avec ce bateau"
-                        crewSuggestionUsed -> "Souvent associe a cet equipage"
+                        boatSuggestionUsed && crewSuggestionUsed -> "Souvent utilisé avec ce bateau et cet équipage"
+                        boatSuggestionUsed -> "Souvent utilisé avec ce bateau"
+                        crewSuggestionUsed -> "Souvent associé à cet équipage"
                         else -> "Suggestion"
                     },
                     score = score,
                 )
             }
         }.sortedWith(compareByDescending<SuggestedCrewMemberUi> { it.score }.thenBy { it.fullName }).take(5)
-    }
-
-    private fun buildSimilarSessionSuggestion(
-        state: NewSessionUiState,
-        sessions: List<SessionWithDetails>,
-    ): SimilarSessionSuggestionUi? {
-        val candidate = sessions
-            .sortedWith(compareByDescending<SessionWithDetails> { it.session.date }.thenByDescending { it.session.startTime })
-            .firstOrNull { session ->
-                val sessionRowerIds = session.sessionRowers.mapNotNull { it.sessionRower.rowerId }.toSet()
-                when {
-                    state.selectedBoatId != null && state.selectedRowerIds.isNotEmpty() ->
-                        session.boat.id == state.selectedBoatId && sessionRowerIds.intersect(state.selectedRowerIds).isNotEmpty()
-                    state.selectedBoatId != null -> session.boat.id == state.selectedBoatId
-                    state.selectedRowerIds.isNotEmpty() -> sessionRowerIds.intersect(state.selectedRowerIds).isNotEmpty()
-                    else -> false
-                }
-            } ?: return null
-
-        return SimilarSessionSuggestionUi(
-            sessionId = candidate.session.id,
-            title = "Reprendre la derniere sortie similaire",
-            subtitle = "${candidate.boat.name} - ${candidate.rowerNames.joinToString().ifBlank { "Aucun rameur" }}",
-        )
     }
 
     private fun NewSessionUiState.withSeatValidation(): NewSessionUiState {
@@ -954,7 +913,7 @@ class NewSessionViewModel(
     companion object {
         fun factory(
             boatRepository: BoatRepository,
-            boatRepairRepository: BoatRepairRepository,
+            remarkRepository: RemarkRepository,
             destinationRepository: DestinationRepository,
             rowerRepository: RowerRepository,
             sessionRepository: SessionRepository,
@@ -965,7 +924,7 @@ class NewSessionViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return NewSessionViewModel(
                         boatRepository = boatRepository,
-                        boatRepairRepository = boatRepairRepository,
+                        remarkRepository = remarkRepository,
                         destinationRepository = destinationRepository,
                         rowerRepository = rowerRepository,
                         sessionRepository = sessionRepository,
@@ -985,18 +944,18 @@ enum class BoatSelectionStatus {
 
 fun BoatSelectionStatus.label(): String {
     return when (this) {
-        BoatSelectionStatus.AVAILABLE -> "Disponible"
-        BoatSelectionStatus.IN_USE -> "En cours"
-        BoatSelectionStatus.IN_REPAIR -> "En reparation"
+        BoatSelectionStatus.AVAILABLE -> "● Disponible"
+        BoatSelectionStatus.IN_USE -> "● Déjà utilisé"
+        BoatSelectionStatus.IN_REPAIR -> "● En réparation"
     }
 }
 
 private fun resolveBoatSelectionStatus(
     boatId: Long,
-    repairs: List<BoatRepairEntity>,
+    remarks: List<RemarkEntity>,
     ongoingSessions: List<SessionWithDetails>,
 ): BoatSelectionStatus {
-    if (repairs.any { it.boatId == boatId && it.repairedAt.isNullOrBlank() }) {
+    if (remarks.any { it.boatId == boatId && it.status == RemarkStatus.REPAIR_NEEDED }) {
         return BoatSelectionStatus.IN_REPAIR
     }
     return if (ongoingSessions.any { it.boat.id == boatId }) {

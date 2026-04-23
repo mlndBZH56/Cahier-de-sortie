@@ -1,6 +1,7 @@
 package com.aca56.cahiersortiecodex.feature.newsession.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -67,7 +69,7 @@ fun NewSessionRoute(
     val viewModel: NewSessionViewModel = viewModel(
         factory = NewSessionViewModel.factory(
             boatRepository = appContainer.boatRepository,
-            boatRepairRepository = appContainer.boatRepairRepository,
+            remarkRepository = appContainer.remarkRepository,
             destinationRepository = appContainer.destinationRepository,
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
@@ -98,7 +100,6 @@ fun NewSessionRoute(
         onToggleQuickMode = viewModel::toggleQuickMode,
         onResetForm = viewModel::resetForm,
         onApplySuggestedCrewMember = viewModel::applySuggestedCrewMember,
-        onApplySimilarSessionSuggestion = viewModel::applySimilarSessionSuggestion,
         onSaveSession = viewModel::saveSession,
         onOpenBoatDetails = onOpenBoatDetails,
         onDismissFeedback = {
@@ -124,7 +125,7 @@ fun EditSessionRoute(
         key = "edit_session_$sessionId",
         factory = NewSessionViewModel.factory(
             boatRepository = appContainer.boatRepository,
-            boatRepairRepository = appContainer.boatRepairRepository,
+            remarkRepository = appContainer.remarkRepository,
             destinationRepository = appContainer.destinationRepository,
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
@@ -156,7 +157,6 @@ fun EditSessionRoute(
         onToggleQuickMode = viewModel::toggleQuickMode,
         onResetForm = viewModel::resetForm,
         onApplySuggestedCrewMember = viewModel::applySuggestedCrewMember,
-        onApplySimilarSessionSuggestion = viewModel::applySimilarSessionSuggestion,
         onSaveSession = viewModel::saveSession,
         onOpenBoatDetails = onOpenBoatDetails,
         onDismissFeedback = {
@@ -193,7 +193,6 @@ fun NewSessionScreen(
     onToggleQuickMode: () -> Unit,
     onResetForm: () -> Unit,
     onApplySuggestedCrewMember: (Long) -> Unit,
-    onApplySimilarSessionSuggestion: () -> Unit,
     onSaveSession: () -> Unit,
     onOpenBoatDetails: (Long) -> Unit,
     onDismissFeedback: () -> Unit,
@@ -230,7 +229,7 @@ fun NewSessionScreen(
 
     if (showTimePicker) {
         AppTimePickerDialog(
-            title = "Choisir l'heure de depart",
+            title = "Choisir l'heure de départ",
             storageTime = uiState.startTime,
             onDismissRequest = { showTimePicker = false },
             onTimeSelected = onStartTimeChanged,
@@ -249,14 +248,14 @@ fun NewSessionScreen(
     uiState.boatConflict?.let { conflict ->
         AlertDialog(
             onDismissRequest = onDismissBoatConflict,
-            title = { Text("Bateau deja utilise") },
-            text = { Text("Ce bateau est deja utilise dans une sortie en cours.") },
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            iconContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            tonalElevation = AlertDialogDefaults.TonalElevation,
+            title = { Text(conflict.title) },
+            text = { Text(conflict.description) },
             confirmButton = {
-                TextButton(onClick = onForceBoatSelection) {
-                    Text("Forcer")
-                }
-            },
-            dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = {
                         onDismissBoatConflict()
@@ -264,9 +263,14 @@ fun NewSessionScreen(
                     }) {
                         Text("Voir la fiche bateau")
                     }
-                    TextButton(onClick = onDismissBoatConflict) {
-                        Text("Annuler")
+                    TextButton(onClick = onForceBoatSelection) {
+                        Text("Forcer")
                     }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissBoatConflict) {
+                    Text("Annuler")
                 }
             },
         )
@@ -306,7 +310,7 @@ fun NewSessionScreen(
             if (!uiState.isQuickMode) {
                 SectionCard(
                     title = "Informations de sortie",
-                    description = "Renseignez la date, l'heure de depart et la destination.",
+                    description = "Renseignez la date, l'heure de départ et la destination.",
                 ) {
                     FormGroupTitle("Date")
                     AppSelectorFieldButton(
@@ -319,7 +323,7 @@ fun NewSessionScreen(
                         Text("Date : ${formatDateForDisplay(uiState.date)}")
                     }
 
-                    FormGroupTitle("Heure de depart")
+                    FormGroupTitle("Heure de départ")
                     SessionSelectionButton(
                         onClick = {
                             dismissKeyboard()
@@ -327,7 +331,7 @@ fun NewSessionScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Heure de depart : ${uiState.startTime}")
+                        Text("Heure de départ : ${uiState.startTime}")
                     }
 
                     FormGroupTitle("Destination")
@@ -391,7 +395,7 @@ fun NewSessionScreen(
             }
 
             SectionCard(
-                title = "Equipage",
+                    title = "Équipage",
                 description = "Choisissez le bateau et les rameurs.",
             ) {
                 FormGroupTitle("Bateau")
@@ -420,6 +424,20 @@ fun NewSessionScreen(
                 Spacer(modifier = Modifier.height(6.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(6.dp))
+
+                if (uiState.suggestedCrew.isNotEmpty()) {
+                    CompactSuggestionsSection(
+                        suggestions = uiState.suggestedCrew,
+                        onApplySuggestion = { rowerId ->
+                            dismissKeyboard()
+                            onApplySuggestedCrewMember(rowerId)
+                        },
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
 
                 FormGroupTitle("Rameurs")
                 Text(
@@ -457,11 +475,11 @@ fun NewSessionScreen(
                     HorizontalDivider()
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    FormGroupTitle("Rameurs invites")
+                    FormGroupTitle("Rameurs invités")
                     SessionOutlinedTextField(
                         value = uiState.guestRowerName,
                         onValueChange = trackedOnGuestRowerNameChanged,
-                        label = { Text("Nom complet du rameur invite") },
+                        label = { Text("Nom complet du rameur invité") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
@@ -473,12 +491,12 @@ fun NewSessionScreen(
                         },
                         shape = MaterialTheme.shapes.medium,
                     ) {
-                        Text("Ajouter un rameur invite")
+                        Text("Ajouter un rameur invité")
                     }
 
                     if (uiState.guestRowers.isEmpty()) {
                         Text(
-                            text = "Aucun rameur invite ajoute.",
+                            text = "Aucun rameur invité ajouté.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -502,61 +520,10 @@ fun NewSessionScreen(
                 }
             }
 
-            if (uiState.suggestedCrew.isNotEmpty() || uiState.similarSessionSuggestion != null) {
-                SectionCard(
-                    title = "Suggestions d'equipage",
-                    description = "Utilisez l'historique local pour aller plus vite.",
-                ) {
-                    uiState.similarSessionSuggestion?.let { suggestion ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = suggestion.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = suggestion.subtitle,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                OutlinedButton(
-                                    onClick = {
-                                        dismissKeyboard()
-                                        onApplySimilarSessionSuggestion()
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text("Reprendre cette sortie")
-                                }
-                            }
-                        }
-                    }
-
-                    uiState.suggestedCrew.forEach { suggestion ->
-                        SuggestedCrewCard(
-                            suggestion = suggestion,
-                            onApply = {
-                                dismissKeyboard()
-                                onApplySuggestedCrewMember(suggestion.rowerId)
-                            },
-                        )
-                    }
-                }
-            }
-
             if (!uiState.isQuickMode) {
                 SectionCard(
-                    title = "Cloture",
-                    description = "Ajoutez les informations de fin si la sortie est terminee.",
+                    title = "Clôture",
+                    description = "Ajoutez les informations de fin si la sortie est terminée.",
                 ) {
                     FormGroupTitle("Heure de fin")
                     Row(
@@ -572,7 +539,7 @@ fun NewSessionScreen(
                         ) {
                             Text(
                                 if (uiState.endTime.isBlank()) {
-                                    "Heure de fin : non definie"
+                                    "Heure de fin : non définie"
                                 } else {
                                     "Heure de fin : ${uiState.endTime}"
                                 },
@@ -672,7 +639,7 @@ private fun HeaderRow(
         )
         if (showReset) {
             OutlinedButton(onClick = onResetForm) {
-                Text("Reinitialiser")
+                Text("Réinitialiser")
             }
         }
     }
@@ -738,10 +705,10 @@ private fun ModeToggleCard(
 private fun QuickModeInfoCard() {
     SectionCard(
         title = "Mode rapide",
-        description = "Seuls le bateau et les rameurs sont affiches. L'heure de depart sera definie automatiquement au demarrage.",
+        description = "Seuls le bateau et les rameurs sont affichés. L'heure de départ sera définie automatiquement au démarrage.",
     ) {
         Text(
-            text = "Le demarrage de la sortie cree directement une sortie en cours.",
+            text = "Le démarrage de la sortie crée directement une sortie en cours.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -780,7 +747,61 @@ private fun SuggestedCrewCard(
                 )
             }
             OutlinedButton(onClick = onApply) {
-                Text("Ajouter")
+                    Text("Ajouter")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactSuggestionsSection(
+    suggestions: List<SuggestedCrewMemberUi>,
+    onApplySuggestion: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FormGroupTitle("Suggestions d'équipage")
+        Text(
+            text = "Touchez un nom pour l'ajouter rapidement.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        suggestions.take(5).forEach { suggestion ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onApplySuggestion(suggestion.rowerId) },
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = suggestion.fullName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = suggestion.reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = "Ajouter",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }
