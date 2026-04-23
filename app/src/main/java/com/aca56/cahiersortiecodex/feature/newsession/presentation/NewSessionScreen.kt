@@ -64,6 +64,7 @@ fun NewSessionRoute(
     val viewModel: NewSessionViewModel = viewModel(
         factory = NewSessionViewModel.factory(
             boatRepository = appContainer.boatRepository,
+            boatRepairRepository = appContainer.boatRepairRepository,
             destinationRepository = appContainer.destinationRepository,
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
@@ -112,6 +113,7 @@ fun EditSessionRoute(
         key = "edit_session_$sessionId",
         factory = NewSessionViewModel.factory(
             boatRepository = appContainer.boatRepository,
+            boatRepairRepository = appContainer.boatRepairRepository,
             destinationRepository = appContainer.destinationRepository,
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
@@ -646,4 +648,3 @@ private fun SessionSelectionButton(
         content = content,
     )
 }
-

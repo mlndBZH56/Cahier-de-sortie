@@ -3,6 +3,9 @@ package com.aca56.cahiersortiecodex.data
 import android.content.Context
 import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
 import com.aca56.cahiersortiecodex.data.local.AppDatabase
+import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
+import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
+import com.aca56.cahiersortiecodex.data.repository.BoatRepairRepository
 import com.aca56.cahiersortiecodex.data.security.PinCodeStore
 import com.aca56.cahiersortiecodex.data.settings.AppIconManager
 import com.aca56.cahiersortiecodex.data.settings.AppPreferencesStore
@@ -11,6 +14,8 @@ import com.aca56.cahiersortiecodex.data.repository.DestinationRepository
 import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
 import com.aca56.cahiersortiecodex.data.repository.RowerRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
+import com.aca56.cahiersortiecodex.data.repository.impl.DefaultBoatPhotoRepository
+import com.aca56.cahiersortiecodex.data.repository.impl.DefaultBoatRepairRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultBoatRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultDestinationRepository
 import com.aca56.cahiersortiecodex.data.repository.impl.DefaultRemarkRepository
@@ -32,6 +37,9 @@ class AppContainer(context: Context) {
     val backupManager: DatabaseBackupManager by lazy {
         DatabaseBackupManager(appContext)
     }
+    val boatPhotoStorage: BoatPhotoStorage by lazy {
+        BoatPhotoStorage(appContext)
+    }
 
     val rowerRepository: RowerRepository by lazy {
         DefaultRowerRepository(database.rowerDao())
@@ -43,6 +51,14 @@ class AppContainer(context: Context) {
 
     val destinationRepository: DestinationRepository by lazy {
         DefaultDestinationRepository(database.destinationDao())
+    }
+
+    val boatRepairRepository: BoatRepairRepository by lazy {
+        DefaultBoatRepairRepository(database.boatRepairDao())
+    }
+
+    val boatPhotoRepository: BoatPhotoRepository by lazy {
+        DefaultBoatPhotoRepository(database.boatPhotoDao())
     }
 
     val sessionRepository: SessionRepository by lazy {

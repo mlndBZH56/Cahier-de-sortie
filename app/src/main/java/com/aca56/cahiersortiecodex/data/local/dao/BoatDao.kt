@@ -15,6 +15,9 @@ interface BoatDao {
     fun observeAll(): Flow<List<BoatEntity>>
 
     @Query("SELECT * FROM boats WHERE id = :id")
+    fun observeById(id: Long): Flow<BoatEntity?>
+
+    @Query("SELECT * FROM boats WHERE id = :id")
     suspend fun getById(id: Long): BoatEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

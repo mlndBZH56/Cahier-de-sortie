@@ -208,7 +208,13 @@ private fun AppNavigationDrawer(
                     selected = isSelected,
                     colors = NavigationDrawerItemDefaults.colors(),
                     onClick = {
-                        navController.navigate(destination.route) {
+                        navController.navigate(
+                            when (destination) {
+                                AppDestination.History -> AppDestination.History.createRoute()
+                                AppDestination.Remarks -> AppDestination.Remarks.createRoute()
+                                else -> destination.route
+                            },
+                        ) {
                             popUpTo(navController.graph.startDestinationId) {
                                 inclusive = false
                             }

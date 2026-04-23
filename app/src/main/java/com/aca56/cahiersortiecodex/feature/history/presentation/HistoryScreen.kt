@@ -47,6 +47,7 @@ import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 @Composable
 fun HistoryRoute(
     contentPadding: PaddingValues,
+    initialBoatId: Long?,
     onOpenSession: (Long) -> Unit,
 ) {
     val context = LocalContext.current
@@ -54,6 +55,7 @@ fun HistoryRoute(
     val viewModel: HistoryViewModel = viewModel(
         factory = HistoryViewModel.factory(
             sessionRepository = appContainer.sessionRepository,
+            initialBoatId = initialBoatId,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()

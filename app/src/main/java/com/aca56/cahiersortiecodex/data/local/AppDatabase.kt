@@ -9,12 +9,16 @@ import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.aca56.cahiersortiecodex.data.local.converter.SessionStatusConverter
 import com.aca56.cahiersortiecodex.data.local.dao.BoatDao
+import com.aca56.cahiersortiecodex.data.local.dao.BoatPhotoDao
+import com.aca56.cahiersortiecodex.data.local.dao.BoatRepairDao
 import com.aca56.cahiersortiecodex.data.local.dao.DestinationDao
 import com.aca56.cahiersortiecodex.data.local.dao.RemarkDao
 import com.aca56.cahiersortiecodex.data.local.dao.RowerDao
 import com.aca56.cahiersortiecodex.data.local.dao.SessionDao
 import com.aca56.cahiersortiecodex.data.local.dao.SessionRowerDao
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
+import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
+import com.aca56.cahiersortiecodex.data.local.entity.BoatRepairEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
@@ -25,18 +29,22 @@ import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
     entities = [
         RowerEntity::class,
         BoatEntity::class,
+        BoatRepairEntity::class,
+        BoatPhotoEntity::class,
         DestinationEntity::class,
         SessionEntity::class,
         SessionRowerEntity::class,
         RemarkEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(SessionStatusConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun rowerDao(): RowerDao
     abstract fun boatDao(): BoatDao
+    abstract fun boatRepairDao(): BoatRepairDao
+    abstract fun boatPhotoDao(): BoatPhotoDao
     abstract fun destinationDao(): DestinationDao
     abstract fun sessionDao(): SessionDao
     abstract fun sessionRowerDao(): SessionRowerDao
@@ -48,6 +56,8 @@ abstract class AppDatabase : RoomDatabase() {
         database.beginTransaction()
         try {
             database.execSQL("DELETE FROM remarks")
+            database.execSQL("DELETE FROM boat_photos")
+            database.execSQL("DELETE FROM boat_repairs")
             database.execSQL("DELETE FROM session_rowers")
             database.execSQL("DELETE FROM sessions")
             database.execSQL("DELETE FROM destinations")
@@ -78,7 +88,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     DATABASE_NAME,
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -191,6 +201,44 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent(),
                 )
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_boatId ON remarks(boatId)")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE boats ADD COLUMN type TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE boats ADD COLUMN weightRange TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE boats ADD COLUMN riggingType TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE boats ADD COLUMN year INTEGER")
+                database.execSQL("ALTER TABLE boats ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
+
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS boat_repairs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        boatId INTEGER NOT NULL,
+                        issue TEXT NOT NULL,
+                        createdAt TEXT NOT NULL,
+                        repairedAt TEXT,
+                        repairNote TEXT,
+                        FOREIGN KEY(boatId) REFERENCES boats(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_boat_repairs_boatId ON boat_repairs(boatId)")
+
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS boat_photos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        boatId INTEGER NOT NULL,
+                        filePath TEXT NOT NULL,
+                        createdAt TEXT NOT NULL,
+                        FOREIGN KEY(boatId) REFERENCES boats(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_boat_photos_boatId ON boat_photos(boatId)")
             }
         }
     }

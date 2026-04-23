@@ -10,6 +10,8 @@ class DefaultBoatRepository(
 ) : BoatRepository {
     override fun observeBoats(): Flow<List<BoatEntity>> = boatDao.observeAll()
 
+    override fun observeBoat(id: Long): Flow<BoatEntity?> = boatDao.observeById(id)
+
     override suspend fun getBoat(id: Long): BoatEntity? = boatDao.getById(id)
 
     override suspend fun saveBoat(boat: BoatEntity): Long = boatDao.insert(boat)

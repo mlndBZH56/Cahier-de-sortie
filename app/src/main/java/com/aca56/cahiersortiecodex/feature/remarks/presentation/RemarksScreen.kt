@@ -45,6 +45,7 @@ import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 @Composable
 fun RemarksRoute(
     contentPadding: PaddingValues,
+    initialBoatId: Long? = null,
 ) {
     val context = LocalContext.current
     val appContainer = (context.applicationContext as CahierSortieApplication).appContainer
@@ -53,6 +54,7 @@ fun RemarksRoute(
             remarkRepository = appContainer.remarkRepository,
             boatRepository = appContainer.boatRepository,
             sessionRepository = appContainer.sessionRepository,
+            initialBoatId = initialBoatId,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
@@ -508,4 +510,3 @@ private fun RemarkEditorCard(
         }
     }
 }
-

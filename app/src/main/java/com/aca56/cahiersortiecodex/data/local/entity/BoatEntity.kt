@@ -9,4 +9,9 @@ data class BoatEntity(
     val id: Long = 0,
     val name: String,
     val seatCount: Int,
+    val type: String = "",
+    val weightRange: String = "",
+    val riggingType: String = "",
+    val year: Int? = null,
+    val notes: String = "",
 )

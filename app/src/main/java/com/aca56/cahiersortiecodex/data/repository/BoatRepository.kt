@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface BoatRepository {
     fun observeBoats(): Flow<List<BoatEntity>>
+    fun observeBoat(id: Long): Flow<BoatEntity?>
     suspend fun getBoat(id: Long): BoatEntity?
     suspend fun saveBoat(boat: BoatEntity): Long
     suspend fun updateBoat(boat: BoatEntity)

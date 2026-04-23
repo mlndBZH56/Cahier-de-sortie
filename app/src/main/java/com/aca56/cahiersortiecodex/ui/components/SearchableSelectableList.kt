@@ -28,6 +28,7 @@ private const val InitialVisibleSelectionCount = 5
 data class SearchableSelectableOption(
     val key: String,
     val label: String,
+    val secondaryLabel: String? = null,
     val usageCount: Int = 0,
 )
 
@@ -111,6 +112,18 @@ fun SearchableSelectableList(
                         MaterialTheme.colorScheme.onSurface
                     },
                 )
+                option.secondaryLabel?.takeIf { it.isNotBlank() }?.let { secondaryLabel ->
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = secondaryLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (option.key in selectedKeys) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
         }
     }
@@ -196,6 +209,18 @@ fun SearchableSingleSelectList(
                         MaterialTheme.colorScheme.onSurface
                     },
                 )
+                option.secondaryLabel?.takeIf { it.isNotBlank() }?.let { secondaryLabel ->
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = secondaryLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (option.key == selectedKey) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
         }
     }

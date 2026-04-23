@@ -139,6 +139,7 @@ data class HistoryUiState(
 
 class HistoryViewModel(
     private val sessionRepository: SessionRepository,
+    private val initialBoatId: Long? = null,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = uiStateMutable.asStateFlow()
@@ -246,10 +247,14 @@ class HistoryViewModel(
                     state.copy(
                         allSessions = mapped,
                         isLoaded = true,
+                        selectedBoatId = when {
+                            state.selectedBoatId != null && state.selectedBoatId in availableBoatIds -> state.selectedBoatId
+                            initialBoatId != null && initialBoatId in availableBoatIds -> initialBoatId
+                            else -> null
+                        },
                         selectedRowers = state.selectedRowers.filterTo(mutableSetOf()) { selectedRower ->
                             selectedRower in availableRowers
                         },
-                        selectedBoatId = state.selectedBoatId?.takeIf { it in availableBoatIds },
                         selectedDestination = state.selectedDestination?.takeIf { it in availableDestinations },
                     )
                 }
@@ -285,12 +290,14 @@ class HistoryViewModel(
     companion object {
         fun factory(
             sessionRepository: SessionRepository,
+            initialBoatId: Long? = null,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return HistoryViewModel(
                         sessionRepository = sessionRepository,
+                        initialBoatId = initialBoatId,
                     ) as T
                 }
             }

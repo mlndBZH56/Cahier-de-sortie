@@ -7,6 +7,10 @@ import com.aca56.cahiersortiecodex.data.local.relation.SessionRowerWithRower
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableOption
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +24,21 @@ data class StatLineUi(
     val totalKm: Double,
 )
 
+data class RowerSessionItemUi(
+    val id: Long,
+    val date: String,
+    val boatName: String,
+    val km: Double,
+)
+
+data class RowerStatUi(
+    val key: String,
+    val label: String,
+    val totalSessions: Int,
+    val totalKm: Double,
+    val sessions: List<RowerSessionItemUi>,
+)
+
 data class GlobalStatsUi(
     val totalSessions: Int = 0,
     val totalKm: Double = 0.0,
@@ -27,12 +46,20 @@ data class GlobalStatsUi(
     val completedSessions: Int = 0,
 )
 
+enum class StatsQuickPeriod {
+    TODAY,
+    THIS_WEEK,
+    THIS_MONTH,
+    CUSTOM,
+}
+
 data class StatsUiState(
     val globalStats: GlobalStatsUi = GlobalStatsUi(),
-    val rowerStats: List<StatLineUi> = emptyList(),
+    val rowerStats: List<RowerStatUi> = emptyList(),
     val boatStats: List<StatLineUi> = emptyList(),
     val dateFrom: String? = null,
     val dateTo: String? = null,
+    val selectedQuickPeriod: StatsQuickPeriod = StatsQuickPeriod.CUSTOM,
     val rowerSearchQuery: String = "",
     val boatSearchQuery: String = "",
     val selectedRowerKeys: Set<String> = emptySet(),
@@ -81,6 +108,7 @@ class StatsViewModel(
             state.copy(
                 dateFrom = value,
                 dateTo = adjustedTo,
+                selectedQuickPeriod = StatsQuickPeriod.CUSTOM,
             )
         }
         recomputeStats()
@@ -100,6 +128,24 @@ class StatsViewModel(
             state.copy(
                 dateFrom = adjustedFrom,
                 dateTo = value,
+                selectedQuickPeriod = StatsQuickPeriod.CUSTOM,
+            )
+        }
+        recomputeStats()
+    }
+
+    fun onQuickPeriodSelected(period: StatsQuickPeriod) {
+        val range = when (period) {
+            StatsQuickPeriod.TODAY -> currentDateRange()
+            StatsQuickPeriod.THIS_WEEK -> currentWeekRange()
+            StatsQuickPeriod.THIS_MONTH -> currentMonthRange()
+            StatsQuickPeriod.CUSTOM -> null to null
+        }
+        uiStateMutable.update {
+            it.copy(
+                selectedQuickPeriod = period,
+                dateFrom = range.first,
+                dateTo = range.second,
             )
         }
         recomputeStats()
@@ -187,23 +233,34 @@ class StatsViewModel(
         )
     }
 
-    private fun List<SessionWithDetails>.toRowerStats(): List<StatLineUi> {
+    private fun List<SessionWithDetails>.toRowerStats(): List<RowerStatUi> {
         return flatMap { session ->
             session.sessionRowers.map { participant ->
-                Triple(
-                    participant.statKey,
-                    participant.displayName,
-                    session.session.km,
+                RowerSessionContribution(
+                    key = participant.statKey,
+                    label = participant.displayName,
+                    session = RowerSessionItemUi(
+                        id = session.session.id,
+                        date = session.session.date,
+                        boatName = session.boat.name,
+                        km = session.session.km,
+                    ),
                 )
             }
-        }.groupBy { it.first }
+        }.groupBy { it.key }
             .values
             .map { entries ->
-                StatLineUi(
-                    key = entries.first().first,
-                    label = entries.first().second,
+                RowerStatUi(
+                    key = entries.first().key,
+                    label = entries.first().label,
                     totalSessions = entries.size,
-                    totalKm = entries.sumOf { it.third },
+                    totalKm = entries.sumOf { it.session.km },
+                    sessions = entries
+                        .map { it.session }
+                        .sortedWith(
+                            compareByDescending<RowerSessionItemUi> { it.date }
+                                .thenBy { it.boatName },
+                        ),
                 )
             }
             .sortedBy { it.label }
@@ -270,6 +327,12 @@ class StatsViewModel(
     private val com.aca56.cahiersortiecodex.data.local.entity.BoatEntity.statKey: String
         get() = "boat:$id"
 
+    private data class RowerSessionContribution(
+        val key: String,
+        val label: String,
+        val session: RowerSessionItemUi,
+    )
+
     companion object {
         fun factory(
             sessionRepository: SessionRepository,
@@ -284,4 +347,34 @@ class StatsViewModel(
             }
         }
     }
+}
+
+private fun currentDateRange(): Pair<String, String> {
+    val today = storageDate(Date())
+    return today to today
+}
+
+private fun currentWeekRange(): Pair<String, String> {
+    val calendar = Calendar.getInstance()
+    calendar.firstDayOfWeek = Calendar.MONDAY
+    while (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+        calendar.add(Calendar.DAY_OF_MONTH, -1)
+    }
+    val start = storageDate(calendar.time)
+    calendar.add(Calendar.DAY_OF_MONTH, 6)
+    val end = storageDate(calendar.time)
+    return start to end
+}
+
+private fun currentMonthRange(): Pair<String, String> {
+    val calendar = Calendar.getInstance()
+    calendar.set(Calendar.DAY_OF_MONTH, 1)
+    val start = storageDate(calendar.time)
+    calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
+    val end = storageDate(calendar.time)
+    return start to end
+}
+
+private fun storageDate(date: Date): String {
+    return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date)
 }

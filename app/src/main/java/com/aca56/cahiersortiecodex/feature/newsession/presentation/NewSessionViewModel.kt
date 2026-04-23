@@ -4,11 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
+import com.aca56.cahiersortiecodex.data.local.entity.BoatRepairEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
+import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
+import com.aca56.cahiersortiecodex.data.repository.BoatRepairRepository
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.DestinationRepository
 import com.aca56.cahiersortiecodex.data.repository.RowerRepository
@@ -51,6 +54,7 @@ data class NewSessionUiState(
     val availableRowers: List<RowerEntity> = emptyList(),
     val rowerUsageCounts: Map<Long, Int> = emptyMap(),
     val boatUsageCounts: Map<Long, Int> = emptyMap(),
+    val boatStatuses: Map<Long, BoatSelectionStatus> = emptyMap(),
     val selectedRowerIds: Set<Long> = emptySet(),
     val rowerSearchQuery: String = "",
     val guestRowerName: String = "",
@@ -104,6 +108,7 @@ data class NewSessionUiState(
             SearchableSelectableOption(
                 key = boat.id.toString(),
                 label = "${boat.name} (${boat.seatCount} places)",
+                secondaryLabel = boatStatuses[boat.id]?.label(),
                 usageCount = boatUsageCounts[boat.id] ?: 0,
             )
         }.sortedWith(compareByDescending<SearchableSelectableOption> { it.usageCount }.thenBy { it.label })
@@ -114,6 +119,7 @@ data class NewSessionUiState(
 
 class NewSessionViewModel(
     private val boatRepository: BoatRepository,
+    private val boatRepairRepository: BoatRepairRepository,
     private val destinationRepository: DestinationRepository,
     private val rowerRepository: RowerRepository,
     private val sessionRepository: SessionRepository,
@@ -129,6 +135,7 @@ class NewSessionViewModel(
         observeDestinations()
         observeRowers()
         observeUsage()
+        observeBoatStatuses()
         if (sessionId != null) {
             loadSession(sessionId)
         }
@@ -675,6 +682,26 @@ class NewSessionViewModel(
         }
     }
 
+    private fun observeBoatStatuses() {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                boatRepository.observeBoats(),
+                boatRepairRepository.observeRepairs(),
+                sessionRepository.observeSessionsWithDetailsByStatus(SessionStatus.ONGOING),
+            ) { boats, repairs, ongoingSessions ->
+                boats.associate { boat ->
+                    boat.id to resolveBoatSelectionStatus(
+                        boatId = boat.id,
+                        repairs = repairs,
+                        ongoingSessions = ongoingSessions,
+                    )
+                }
+            }.collect { statuses ->
+                uiStateMutable.update { it.copy(boatStatuses = statuses) }
+            }
+        }
+    }
+
     private fun NewSessionUiState.withSeatValidation(): NewSessionUiState {
         return if (!isSeatCountValid) {
             copy(
@@ -692,6 +719,7 @@ class NewSessionViewModel(
     companion object {
         fun factory(
             boatRepository: BoatRepository,
+            boatRepairRepository: BoatRepairRepository,
             destinationRepository: DestinationRepository,
             rowerRepository: RowerRepository,
             sessionRepository: SessionRepository,
@@ -702,6 +730,7 @@ class NewSessionViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return NewSessionViewModel(
                         boatRepository = boatRepository,
+                        boatRepairRepository = boatRepairRepository,
                         destinationRepository = destinationRepository,
                         rowerRepository = rowerRepository,
                         sessionRepository = sessionRepository,
@@ -710,5 +739,34 @@ class NewSessionViewModel(
                 }
             }
         }
+    }
+}
+
+enum class BoatSelectionStatus {
+    AVAILABLE,
+    IN_USE,
+    IN_REPAIR,
+}
+
+private fun BoatSelectionStatus.label(): String {
+    return when (this) {
+        BoatSelectionStatus.AVAILABLE -> "Disponible"
+        BoatSelectionStatus.IN_USE -> "En cours"
+        BoatSelectionStatus.IN_REPAIR -> "En réparation"
+    }
+}
+
+private fun resolveBoatSelectionStatus(
+    boatId: Long,
+    repairs: List<BoatRepairEntity>,
+    ongoingSessions: List<SessionWithDetails>,
+): BoatSelectionStatus {
+    if (repairs.any { it.boatId == boatId && it.repairedAt.isNullOrBlank() }) {
+        return BoatSelectionStatus.IN_REPAIR
+    }
+    return if (ongoingSessions.any { it.boat.id == boatId }) {
+        BoatSelectionStatus.IN_USE
+    } else {
+        BoatSelectionStatus.AVAILABLE
     }
 }

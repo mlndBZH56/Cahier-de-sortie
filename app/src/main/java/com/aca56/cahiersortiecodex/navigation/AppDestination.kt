@@ -7,14 +7,40 @@ sealed class AppDestination(
     data object Home : AppDestination("home", "Accueil")
     data object NewSession : AppDestination("new_session", "Nouvelle session")
     data object OngoingSessions : AppDestination("ongoing_sessions", "Sessions en cours")
-    data object History : AppDestination("history", "Historique")
+    data object Boats : AppDestination("boats", "Bateaux")
+    data object BoatDetail : AppDestination("boat_detail?boatId={boatId}", "Détails du bateau") {
+        fun createRoute(boatId: Long? = null): String {
+            return if (boatId == null) {
+                "boat_detail"
+            } else {
+                "boat_detail?boatId=$boatId"
+            }
+        }
+    }
+    data object History : AppDestination("history?boatId={boatId}", "Historique") {
+        fun createRoute(boatId: Long? = null): String {
+            return if (boatId == null) {
+                "history"
+            } else {
+                "history?boatId=$boatId"
+            }
+        }
+    }
     data object HistoryDetail : AppDestination("history_detail/{sessionId}", "Détails de la session") {
         fun createRoute(sessionId: Long): String = "history_detail/$sessionId"
     }
     data object EditSession : AppDestination("edit_session/{sessionId}", "Modifier la session") {
         fun createRoute(sessionId: Long): String = "edit_session/$sessionId"
     }
-    data object Remarks : AppDestination("remarks", "Remarques")
+    data object Remarks : AppDestination("remarks?boatId={boatId}", "Remarques") {
+        fun createRoute(boatId: Long? = null): String {
+            return if (boatId == null) {
+                "remarks"
+            } else {
+                "remarks?boatId=$boatId"
+            }
+        }
+    }
     data object Stats : AppDestination("stats", "Statistiques")
     data object Settings : AppDestination("settings", "Paramètres")
     data object SettingsRowers : AppDestination("settings/rowers", "Gérer les rameurs")
@@ -26,6 +52,8 @@ val allDestinations = listOf(
     AppDestination.Home,
     AppDestination.NewSession,
     AppDestination.OngoingSessions,
+    AppDestination.Boats,
+    AppDestination.BoatDetail,
     AppDestination.History,
     AppDestination.HistoryDetail,
     AppDestination.EditSession,
@@ -41,6 +69,7 @@ val topLevelDestinations = listOf(
     AppDestination.Home,
     AppDestination.NewSession,
     AppDestination.OngoingSessions,
+    AppDestination.Boats,
     AppDestination.History,
     AppDestination.Remarks,
     AppDestination.Stats,

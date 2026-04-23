@@ -83,6 +83,7 @@ class RemarksViewModel(
     private val remarkRepository: RemarkRepository,
     private val boatRepository: BoatRepository,
     private val sessionRepository: SessionRepository,
+    private val initialBoatId: Long? = null,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(RemarksUiState())
     val uiState: StateFlow<RemarksUiState> = uiStateMutable.asStateFlow()
@@ -417,7 +418,11 @@ class RemarksViewModel(
                         availableBoats = boats,
                         boatUsageCounts = boatUsageCounts,
                         remarks = remarks,
-                        selectedBoatId = validFilterBoatId,
+                        selectedBoatId = when {
+                            validFilterBoatId != null -> validFilterBoatId
+                            initialBoatId != null && boats.any { it.id == initialBoatId } -> initialBoatId
+                            else -> null
+                        },
                         selectedDateFilter = state.selectedDateFilter,
                         selectedBoatForEditorId = when (updatedEditingRemark?.source) {
                             RemarkSource.SESSION -> updatedEditingRemark.boatId
@@ -445,6 +450,7 @@ class RemarksViewModel(
             remarkRepository: RemarkRepository,
             boatRepository: BoatRepository,
             sessionRepository: SessionRepository,
+            initialBoatId: Long? = null,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -453,6 +459,7 @@ class RemarksViewModel(
                         remarkRepository = remarkRepository,
                         boatRepository = boatRepository,
                         sessionRepository = sessionRepository,
+                        initialBoatId = initialBoatId,
                     ) as T
                 }
             }

@@ -2,7 +2,6 @@ package com.aca56.cahiersortiecodex.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.NavHostController
@@ -11,6 +10,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.aca56.cahiersortiecodex.CahierSortieApplication
+import com.aca56.cahiersortiecodex.feature.boats.presentation.BoatDetailRoute
+import com.aca56.cahiersortiecodex.feature.boats.presentation.BoatsRoute
 import com.aca56.cahiersortiecodex.feature.history.presentation.HistoryDetailRoute
 import com.aca56.cahiersortiecodex.feature.history.presentation.HistoryRoute
 import com.aca56.cahiersortiecodex.feature.history.presentation.HistoryViewModel
@@ -70,14 +71,20 @@ fun CahierSortieNavHost(navController: NavHostController) {
                             restoreState = false
                         }
                     },
+                    onOpenBoats = {
+                        navController.navigate(AppDestination.Boats.route) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
                     onOpenHistory = {
-                        navController.navigate(AppDestination.History.route) {
+                        navController.navigate(AppDestination.History.createRoute()) {
                             launchSingleTop = true
                             restoreState = false
                         }
                     },
                     onOpenRemarks = {
-                        navController.navigate(AppDestination.Remarks.route) {
+                        navController.navigate(AppDestination.Remarks.createRoute()) {
                             launchSingleTop = true
                             restoreState = false
                         }
@@ -120,9 +127,61 @@ fun CahierSortieNavHost(navController: NavHostController) {
                     },
                 )
             }
-            composable(AppDestination.History.route) {
+            composable(AppDestination.Boats.route) {
+                BoatsRoute(
+                    contentPadding = innerPadding,
+                    onOpenBoat = { selectedBoatId ->
+                        navController.navigate(AppDestination.BoatDetail.createRoute(selectedBoatId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+            composable(
+                route = AppDestination.BoatDetail.route,
+                arguments = listOf(
+                    navArgument("boatId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                ),
+            ) { backStackEntry ->
+                val boatId = backStackEntry.arguments?.getLong("boatId")?.takeIf { it != -1L }
+                BoatDetailRoute(
+                    contentPadding = innerPadding,
+                    boatId = boatId,
+                    onOpenSession = { sessionId ->
+                        navController.navigate(AppDestination.HistoryDetail.createRoute(sessionId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenFullHistory = { selectedBoatId ->
+                        navController.navigate(AppDestination.History.createRoute(selectedBoatId)) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
+                    onOpenBoatRemarks = { selectedBoatId ->
+                        navController.navigate(AppDestination.Remarks.createRoute(selectedBoatId)) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
+                )
+            }
+            composable(
+                route = AppDestination.History.route,
+                arguments = listOf(
+                    navArgument("boatId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                ),
+            ) { backStackEntry ->
+                val initialBoatId = backStackEntry.arguments?.getLong("boatId")?.takeIf { it != -1L }
                 HistoryRoute(
                     contentPadding = innerPadding,
+                    initialBoatId = initialBoatId,
                     onOpenSession = { sessionId ->
                         navController.navigate(AppDestination.HistoryDetail.createRoute(sessionId)) {
                             launchSingleTop = true
@@ -136,15 +195,12 @@ fun CahierSortieNavHost(navController: NavHostController) {
                     navArgument("sessionId") { type = NavType.LongType },
                 ),
             ) { backStackEntry ->
-                val historyBackStackEntry = remember(backStackEntry) {
-                    navController.getBackStackEntry(AppDestination.History.route)
-                }
                 val appContainer =
                     (navController.context.applicationContext as CahierSortieApplication).appContainer
                 val historyViewModel: HistoryViewModel = viewModel(
-                    viewModelStoreOwner = historyBackStackEntry,
                     factory = HistoryViewModel.factory(
                         sessionRepository = appContainer.sessionRepository,
+                        initialBoatId = null,
                     ),
                 )
                 val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
@@ -163,7 +219,14 @@ fun CahierSortieNavHost(navController: NavHostController) {
                 )
             }
             composable(AppDestination.Stats.route) {
-                StatsRoute(contentPadding = innerPadding)
+                StatsRoute(
+                    contentPadding = innerPadding,
+                    onOpenSession = { sessionId ->
+                        navController.navigate(AppDestination.HistoryDetail.createRoute(sessionId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                )
             }
             composable(
                 route = AppDestination.EditSession.route,
@@ -199,8 +262,20 @@ fun CahierSortieNavHost(navController: NavHostController) {
                     },
                 )
             }
-            composable(AppDestination.Remarks.route) {
-                RemarksRoute(contentPadding = innerPadding)
+            composable(
+                route = AppDestination.Remarks.route,
+                arguments = listOf(
+                    navArgument("boatId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                ),
+            ) { backStackEntry ->
+                val initialBoatId = backStackEntry.arguments?.getLong("boatId")?.takeIf { it != -1L }
+                RemarksRoute(
+                    contentPadding = innerPadding,
+                    initialBoatId = initialBoatId,
+                )
             }
             composable(AppDestination.Settings.route) {
                 SettingsRoute(
