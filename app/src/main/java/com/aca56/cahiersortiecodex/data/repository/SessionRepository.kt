@@ -17,4 +17,5 @@ interface SessionRepository {
     suspend fun deleteSession(session: SessionEntity)
     suspend fun saveSessionRowers(crossRefs: List<SessionRowerEntity>)
     suspend fun clearSessionRowers(sessionId: Long)
+    suspend fun archiveExpiredOngoingSessions(currentDate: String)
 }

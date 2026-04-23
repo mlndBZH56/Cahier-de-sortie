@@ -50,4 +50,12 @@ class DefaultSessionRepository(
     override suspend fun clearSessionRowers(sessionId: Long) {
         sessionRowerDao.deleteBySessionId(sessionId)
     }
+
+    override suspend fun archiveExpiredOngoingSessions(currentDate: String) {
+        sessionDao.updateStatusBeforeDate(
+            currentStatus = SessionStatus.ONGOING,
+            newStatus = SessionStatus.NOT_COMPLETED,
+            currentDate = currentDate,
+        )
+    }
 }

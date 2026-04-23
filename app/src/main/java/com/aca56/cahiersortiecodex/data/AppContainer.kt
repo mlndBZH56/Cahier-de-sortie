@@ -1,6 +1,13 @@
 package com.aca56.cahiersortiecodex.data
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
 import com.aca56.cahiersortiecodex.data.local.AppDatabase
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
@@ -25,6 +32,7 @@ import com.aca56.cahiersortiecodex.data.repository.impl.DefaultSessionRepository
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val database: AppDatabase = AppDatabase.getInstance(appContext)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val pinCodeStore: PinCodeStore by lazy {
         PinCodeStore(appContext)
     }
@@ -75,4 +83,14 @@ class AppContainer(context: Context) {
     fun resetAllAppData() {
         database.resetAllData()
     }
+
+    init {
+        appScope.launch {
+            sessionRepository.archiveExpiredOngoingSessions(currentStorageDate())
+        }
+    }
+}
+
+private fun currentStorageDate(): String {
+    return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 }

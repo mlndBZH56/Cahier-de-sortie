@@ -106,6 +106,11 @@ fun CahierSortieNavHost(navController: NavHostController) {
             composable(AppDestination.NewSession.route) {
                 NewSessionRoute(
                     contentPadding = innerPadding,
+                    onOpenBoatDetails = { boatId ->
+                        navController.navigate(AppDestination.BoatDetail.createRoute(boatId)) {
+                            launchSingleTop = true
+                        }
+                    },
                     onSessionSaved = {
                         navController.navigate(AppDestination.Home.route) {
                             popUpTo(navController.graph.startDestinationId) {
@@ -238,6 +243,11 @@ fun CahierSortieNavHost(navController: NavHostController) {
                 EditSessionRoute(
                     contentPadding = innerPadding,
                     sessionId = sessionId,
+                    onOpenBoatDetails = { boatId ->
+                        navController.navigate(AppDestination.BoatDetail.createRoute(boatId)) {
+                            launchSingleTop = true
+                        }
+                    },
                     onSessionSaved = { savedStatus ->
                         when (savedStatus) {
                             SessionStatus.ONGOING -> {
@@ -250,6 +260,15 @@ fun CahierSortieNavHost(navController: NavHostController) {
                                 }
                             }
                             SessionStatus.COMPLETED -> {
+                                navController.navigate(AppDestination.Home.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        inclusive = false
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = false
+                                }
+                            }
+                            SessionStatus.NOT_COMPLETED -> {
                                 navController.navigate(AppDestination.Home.route) {
                                     popUpTo(navController.graph.startDestinationId) {
                                         inclusive = false

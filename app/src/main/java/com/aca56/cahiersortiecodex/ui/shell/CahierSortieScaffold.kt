@@ -38,6 +38,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.aca56.cahiersortiecodex.navigation.AppDestination
 import com.aca56.cahiersortiecodex.navigation.allDestinations
 import com.aca56.cahiersortiecodex.navigation.topLevelDestinations
+import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 import kotlinx.coroutines.launch
 
 @Composable
@@ -107,6 +108,7 @@ private fun AppScaffold(
     onMenuClick: () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val dismissKeyboard = rememberDismissKeyboardAction()
     val currentBackStackEntry = navController.currentBackStackEntryAsState().value
     val currentDestination = currentBackStackEntry?.destination
     val currentAppDestination = allDestinations.firstOrNull { destination ->
@@ -132,6 +134,7 @@ private fun AppScaffold(
                     if (!isTopLevelDestination && navController.previousBackStackEntry != null) {
                         IconButton(
                             onClick = {
+                                dismissKeyboard()
                                 navController.navigateUp()
                             },
                         ) {
@@ -143,6 +146,7 @@ private fun AppScaffold(
                     } else if (showMenuButton) {
                         IconButton(
                             onClick = {
+                                dismissKeyboard()
                                 onMenuClick()
                             },
                         ) {
@@ -177,6 +181,7 @@ private fun AppNavigationDrawer(
     navController: NavHostController,
     onItemClick: (() -> Unit)? = null,
 ) {
+    val dismissKeyboard = rememberDismissKeyboardAction()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
 
     Surface(
@@ -208,6 +213,7 @@ private fun AppNavigationDrawer(
                     selected = isSelected,
                     colors = NavigationDrawerItemDefaults.colors(),
                     onClick = {
+                        dismissKeyboard()
                         navController.navigate(
                             when (destination) {
                                 AppDestination.History -> AppDestination.History.createRoute()

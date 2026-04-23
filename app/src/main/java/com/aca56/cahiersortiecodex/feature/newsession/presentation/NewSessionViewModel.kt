@@ -25,19 +25,33 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-private fun defaultSessionDate(): String {
-    return currentStorageDate()
-}
+private fun defaultSessionDate(): String = currentStorageDate()
 
-private fun defaultSessionTime(): String {
-    return currentStorageTime()
-}
+private fun defaultSessionTime(): String = currentStorageTime()
 
 data class GuestRowerUi(
     val localId: Long,
     val fullName: String,
-) {
-}
+)
+
+data class SuggestedCrewMemberUi(
+    val rowerId: Long,
+    val fullName: String,
+    val reason: String,
+    val score: Int,
+)
+
+data class SimilarSessionSuggestionUi(
+    val sessionId: Long,
+    val title: String,
+    val subtitle: String,
+)
+
+data class BoatConflictUi(
+    val boatId: Long,
+    val boatName: String,
+    val activeSessionId: Long,
+)
 
 private fun normalizeGuestName(value: String): String {
     return value.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.joinToString(" ")
@@ -45,6 +59,7 @@ private fun normalizeGuestName(value: String): String {
 
 data class NewSessionUiState(
     val editingSessionId: Long? = null,
+    val isQuickMode: Boolean = false,
     val date: String = defaultSessionDate(),
     val selectedBoatId: Long? = null,
     val availableBoats: List<BoatEntity> = emptyList(),
@@ -59,6 +74,9 @@ data class NewSessionUiState(
     val rowerSearchQuery: String = "",
     val guestRowerName: String = "",
     val guestRowers: List<GuestRowerUi> = emptyList(),
+    val suggestedCrew: List<SuggestedCrewMemberUi> = emptyList(),
+    val similarSessionSuggestion: SimilarSessionSuggestionUi? = null,
+    val boatConflict: BoatConflictUi? = null,
     val startTime: String = defaultSessionTime(),
     val endTime: String = "",
     val km: String = "",
@@ -84,13 +102,14 @@ data class NewSessionUiState(
     val canSave: Boolean
         get() = !isSaving &&
             selectedBoatId != null &&
+            totalSelectedRowers > 0 &&
             date.isNotBlank() &&
             startTime.isNotBlank() &&
             isSeatCountValid
 
     val filteredRowers: List<RowerEntity>
         get() = availableRowers.filter { rower ->
-            val fullName = "${rower.firstName} ${rower.lastName}"
+            val fullName = "${rower.firstName} ${rower.lastName}".trim()
             rowerSearchQuery.isBlank() || fullName.contains(rowerSearchQuery.trim(), ignoreCase = true)
         }
 
@@ -129,12 +148,14 @@ class NewSessionViewModel(
     val uiState: StateFlow<NewSessionUiState> = uiStateMutable.asStateFlow()
 
     private var nextGuestId = 1L
+    private var allSessions: List<SessionWithDetails> = emptyList()
+    private var ongoingSessionsByBoatId: Map<Long, SessionWithDetails> = emptyMap()
 
     init {
         observeBoats()
         observeDestinations()
         observeRowers()
-        observeUsage()
+        observeUsageAndSuggestions()
         observeBoatStatuses()
         if (sessionId != null) {
             loadSession(sessionId)
@@ -151,6 +172,33 @@ class NewSessionViewModel(
         }
     }
 
+    fun toggleQuickMode() {
+        uiStateMutable.update { state ->
+            state.copy(
+                isQuickMode = !state.isQuickMode,
+                date = currentStorageDate(),
+                startTime = currentStorageTime(),
+                selectedDestinationId = if (!state.isQuickMode) null else state.selectedDestinationId,
+                isCustomDestination = if (!state.isQuickMode) false else state.isCustomDestination,
+                destination = if (!state.isQuickMode) "" else state.destination,
+                endTime = if (!state.isQuickMode) "" else state.endTime,
+                km = if (!state.isQuickMode) "" else state.km,
+                remarks = if (!state.isQuickMode) "" else state.remarks,
+                errorMessage = null,
+                successMessage = null,
+                savedSessionStatus = null,
+            )
+        }
+        refreshSuggestions()
+    }
+
+    fun resetForm() {
+        uiStateMutable.update { state ->
+            state.resetPreservingSources(editingSessionId = state.editingSessionId)
+        }
+        refreshSuggestions()
+    }
+
     fun onDateChanged(value: String) {
         uiStateMutable.update {
             it.copy(
@@ -163,14 +211,37 @@ class NewSessionViewModel(
     }
 
     fun onBoatSelected(boatId: Long) {
-        uiStateMutable.update {
-            val updated = it.copy(
-                selectedBoatId = boatId,
-                errorMessage = null,
-                successMessage = null,
-            )
-            updated.withSeatValidation()
+        val conflict = ongoingSessionsByBoatId[boatId]
+        val currentState = uiState.value
+        if (
+            conflict != null &&
+            currentState.editingSessionId != conflict.session.id &&
+            currentState.selectedBoatId != boatId
+        ) {
+            uiStateMutable.update {
+                it.copy(
+                    boatConflict = BoatConflictUi(
+                        boatId = boatId,
+                        boatName = conflict.boat.name,
+                        activeSessionId = conflict.session.id,
+                    ),
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+            return
         }
+
+        applyBoatSelection(boatId)
+    }
+
+    fun dismissBoatConflict() {
+        uiStateMutable.update { it.copy(boatConflict = null) }
+    }
+
+    fun forceBoatSelection() {
+        val conflictBoatId = uiState.value.boatConflict?.boatId ?: return
+        applyBoatSelection(conflictBoatId)
     }
 
     fun onStartTimeChanged(value: String) {
@@ -300,6 +371,45 @@ class NewSessionViewModel(
                 savedSessionStatus = null,
             ).withSeatValidation()
         }
+        refreshSuggestions()
+    }
+
+    fun applySuggestedCrewMember(rowerId: Long) {
+        if (uiState.value.selectedRowerIds.contains(rowerId)) return
+        onRowerChecked(rowerId = rowerId, checked = true)
+    }
+
+    fun applySimilarSessionSuggestion() {
+        val suggestionId = uiState.value.similarSessionSuggestion?.sessionId ?: return
+        val sessionWithDetails = allSessions.firstOrNull { it.session.id == suggestionId } ?: return
+
+        uiStateMutable.update { state ->
+            val baseState = state.copy(
+                selectedBoatId = sessionWithDetails.boat.id,
+                selectedRowerIds = sessionWithDetails.sessionRowers.mapNotNull { it.sessionRower.rowerId }.toSet(),
+                guestRowers = sessionWithDetails.sessionRowers.mapNotNull { participant ->
+                    participant.sessionRower.guestName?.let { guestName ->
+                        GuestRowerUi(
+                            localId = nextGuestId++,
+                            fullName = normalizeGuestName(guestName),
+                        )
+                    }
+                },
+                selectedDestinationId = if (state.isQuickMode) null else sessionWithDetails.destination?.id,
+                isCustomDestination = if (state.isQuickMode) {
+                    false
+                } else {
+                    sessionWithDetails.destination == null && sessionWithDetails.destinationName.isNotBlank()
+                },
+                destination = if (state.isQuickMode) "" else sessionWithDetails.destinationName,
+                errorMessage = null,
+                successMessage = null,
+                savedSessionStatus = null,
+                boatConflict = null,
+            )
+            baseState.withSeatValidation()
+        }
+        refreshSuggestions()
     }
 
     fun addGuestRower() {
@@ -332,6 +442,7 @@ class NewSessionViewModel(
                 savedSessionStatus = null,
             ).withSeatValidation()
         }
+        refreshSuggestions()
     }
 
     fun removeGuestRower(localId: Long) {
@@ -342,15 +453,23 @@ class NewSessionViewModel(
                 successMessage = null,
             ).withSeatValidation()
         }
+        refreshSuggestions()
     }
 
     fun saveSession() {
         val currentState = uiState.value
+        val effectiveDate = if (currentState.isQuickMode && !currentState.isEditMode) currentStorageDate() else currentState.date.trim()
+        val effectiveStartTime = if (currentState.isQuickMode && !currentState.isEditMode) currentStorageTime() else currentState.startTime.trim()
+        val effectiveEndTime = if (currentState.isQuickMode) "" else currentState.endTime.trim()
+        val effectiveDestination = if (currentState.isQuickMode) "" else currentState.destination.trim()
+        val effectiveCustomDestination = if (currentState.isQuickMode) false else currentState.isCustomDestination
+        val effectiveSelectedDestinationId = if (currentState.isQuickMode) null else currentState.selectedDestinationId
+        val effectiveKmValue = if (currentState.isQuickMode) "" else currentState.km
+        val parsedKm = effectiveKmValue.trim().replace(',', '.').takeIf { it.isNotBlank() }?.toDoubleOrNull()
         val selectedBoat = currentState.selectedBoat
-        val parsedKm = currentState.km.trim().replace(',', '.').takeIf { it.isNotBlank() }?.toDoubleOrNull()
 
         when {
-            currentState.date.isBlank() -> {
+            effectiveDate.isBlank() -> {
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "Veuillez choisir une date avant d'enregistrer la session.",
@@ -370,7 +489,7 @@ class NewSessionViewModel(
                 return
             }
 
-            currentState.startTime.isBlank() -> {
+            effectiveStartTime.isBlank() -> {
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "Veuillez choisir une heure de départ avant d'enregistrer la session.",
@@ -380,7 +499,7 @@ class NewSessionViewModel(
                 return
             }
 
-            currentState.isCustomDestination && currentState.destination.trim().isBlank() -> {
+            effectiveCustomDestination && effectiveDestination.isBlank() -> {
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "Veuillez saisir une destination ou choisir une destination existante.",
@@ -390,7 +509,7 @@ class NewSessionViewModel(
                 return
             }
 
-            currentState.endTime.isNotBlank() && currentState.endTime == currentState.startTime -> {
+            effectiveEndTime.isNotBlank() && effectiveEndTime == effectiveStartTime -> {
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "L'heure de fin doit être différente de l'heure de départ pour enregistrer une session terminée.",
@@ -400,7 +519,7 @@ class NewSessionViewModel(
                 return
             }
 
-            currentState.endTime.isNotBlank() && currentState.endTime < currentState.startTime -> {
+            effectiveEndTime.isNotBlank() && effectiveEndTime < effectiveStartTime -> {
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "L'heure de fin doit être postérieure à l'heure de départ pour enregistrer une session terminée.",
@@ -410,7 +529,7 @@ class NewSessionViewModel(
                 return
             }
 
-            currentState.km.isNotBlank() && parsedKm == null -> {
+            effectiveKmValue.isNotBlank() && parsedKm == null -> {
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "Veuillez saisir un nombre de kilomètres valide, ou laisser le champ vide.",
@@ -462,12 +581,11 @@ class NewSessionViewModel(
 
             runCatching {
                 val destinationId = when {
-                    currentState.selectedDestinationId != null -> currentState.selectedDestinationId
-                    currentState.destination.trim().isNotBlank() -> {
-                        val destinationName = currentState.destination.trim()
-                        destinationRepository.getDestinationByName(destinationName)?.id
+                    effectiveSelectedDestinationId != null -> effectiveSelectedDestinationId
+                    effectiveDestination.isNotBlank() -> {
+                        destinationRepository.getDestinationByName(effectiveDestination)?.id
                             ?: destinationRepository.saveDestination(
-                                DestinationEntity(name = destinationName),
+                                DestinationEntity(name = effectiveDestination),
                             )
                     }
                     else -> null
@@ -476,14 +594,14 @@ class NewSessionViewModel(
                 val targetSessionId = currentState.editingSessionId
                 val sessionEntity = SessionEntity(
                     id = targetSessionId ?: 0L,
-                    date = currentState.date.trim(),
+                    date = effectiveDate,
                     boatId = selectedBoat.id,
-                    startTime = currentState.startTime.trim(),
-                    endTime = currentState.endTime.trim().ifBlank { null },
+                    startTime = effectiveStartTime,
+                    endTime = effectiveEndTime.ifBlank { null },
                     destinationId = destinationId,
                     km = parsedKm ?: 0.0,
-                    remarks = currentState.remarks.trim().ifBlank { null },
-                    status = currentState.derivedStatus,
+                    remarks = if (currentState.isQuickMode) null else currentState.remarks.trim().ifBlank { null },
+                    status = if (effectiveEndTime.isBlank()) SessionStatus.ONGOING else SessionStatus.COMPLETED,
                 )
 
                 val savedSessionId = if (targetSessionId == null) {
@@ -516,21 +634,20 @@ class NewSessionViewModel(
                             isSaving = false,
                             errorMessage = null,
                             successMessage = "Modifications enregistrées.",
-                            savedSessionStatus = currentState.derivedStatus,
+                            savedSessionStatus = if (effectiveEndTime.isBlank()) SessionStatus.ONGOING else SessionStatus.COMPLETED,
                         )
                     } else {
-                        NewSessionUiState(
-                            availableBoats = state.availableBoats,
-                            selectedBoatId = null,
-                            availableDestinations = state.availableDestinations,
-                            availableRowers = state.availableRowers,
-                            rowerUsageCounts = state.rowerUsageCounts,
-                            boatUsageCounts = state.boatUsageCounts,
-                            successMessage = "Session enregistrée avec succès.",
-                            savedSessionStatus = currentState.derivedStatus,
+                        state.resetPreservingSources(editingSessionId = null).copy(
+                            successMessage = if (currentState.isQuickMode) {
+                                "Sortie démarrée."
+                            } else {
+                                "Session enregistrée avec succès."
+                            },
+                            savedSessionStatus = if (effectiveEndTime.isBlank()) SessionStatus.ONGOING else SessionStatus.COMPLETED,
                         )
                     }
                 }
+                refreshSuggestions()
             }.onFailure {
                 uiStateMutable.update {
                     it.copy(
@@ -586,6 +703,7 @@ class NewSessionViewModel(
                         savedSessionStatus = null,
                     ).withSeatValidation()
                 }
+                refreshSuggestions()
             }.onFailure {
                 uiStateMutable.update {
                     it.copy(
@@ -610,6 +728,7 @@ class NewSessionViewModel(
                         selectedBoatId = selectedBoatId,
                     ).withSeatValidation()
                 }
+                refreshSuggestions()
             }
         }
     }
@@ -649,13 +768,16 @@ class NewSessionViewModel(
                         selectedRowerIds = validSelectedIds,
                     ).withSeatValidation()
                 }
+                refreshSuggestions()
             }
         }
     }
 
-    private fun observeUsage() {
+    private fun observeUsageAndSuggestions() {
         viewModelScope.launch {
             sessionRepository.observeSessionsWithDetails().collect { sessions ->
+                allSessions = sessions
+
                 val rowerUsageCounts = buildMap<Long, Int> {
                     sessions.forEach { session ->
                         session.sessionRowers.forEach { participant ->
@@ -678,6 +800,7 @@ class NewSessionViewModel(
                         boatUsageCounts = boatUsageCounts,
                     )
                 }
+                refreshSuggestions()
             }
         }
     }
@@ -689,6 +812,7 @@ class NewSessionViewModel(
                 boatRepairRepository.observeRepairs(),
                 sessionRepository.observeSessionsWithDetailsByStatus(SessionStatus.ONGOING),
             ) { boats, repairs, ongoingSessions ->
+                ongoingSessionsByBoatId = ongoingSessions.associateBy { it.boat.id }
                 boats.associate { boat ->
                     boat.id to resolveBoatSelectionStatus(
                         boatId = boat.id,
@@ -700,6 +824,105 @@ class NewSessionViewModel(
                 uiStateMutable.update { it.copy(boatStatuses = statuses) }
             }
         }
+    }
+
+    private fun applyBoatSelection(boatId: Long) {
+        uiStateMutable.update {
+            val updated = it.copy(
+                selectedBoatId = boatId,
+                boatConflict = null,
+                errorMessage = null,
+                successMessage = null,
+            )
+            updated.withSeatValidation()
+        }
+        refreshSuggestions()
+    }
+
+    private fun refreshSuggestions() {
+        val history = allSessions.filter { it.session.status != SessionStatus.ONGOING }
+        uiStateMutable.update { state ->
+            state.copy(
+                suggestedCrew = buildSuggestedCrew(state, history),
+                similarSessionSuggestion = buildSimilarSessionSuggestion(state, history),
+            )
+        }
+    }
+
+    private fun buildSuggestedCrew(
+        state: NewSessionUiState,
+        sessions: List<SessionWithDetails>,
+    ): List<SuggestedCrewMemberUi> {
+        if (state.availableRowers.isEmpty()) return emptyList()
+
+        val scores = mutableMapOf<Long, Int>()
+        var boatSuggestionUsed = false
+        var crewSuggestionUsed = false
+
+        state.selectedBoatId?.let { selectedBoatId ->
+            sessions.filter { it.boat.id == selectedBoatId }.forEach { session ->
+                session.sessionRowers.mapNotNull { it.sessionRower.rowerId }.forEach { rowerId ->
+                    scores[rowerId] = (scores[rowerId] ?: 0) + 3
+                }
+            }
+            boatSuggestionUsed = true
+        }
+
+        if (state.selectedRowerIds.isNotEmpty()) {
+            sessions.filter { session ->
+                val rowerIds = session.sessionRowers.mapNotNull { it.sessionRower.rowerId }.toSet()
+                rowerIds.any { it in state.selectedRowerIds }
+            }.forEach { session ->
+                session.sessionRowers.mapNotNull { it.sessionRower.rowerId }.forEach { rowerId ->
+                    scores[rowerId] = (scores[rowerId] ?: 0) + 2
+                }
+            }
+            crewSuggestionUsed = true
+        }
+
+        return state.availableRowers.mapNotNull { rower ->
+            val fullName = "${rower.firstName} ${rower.lastName}".trim()
+            val score = scores[rower.id] ?: 0
+            if (score <= 0 || rower.id in state.selectedRowerIds) {
+                null
+            } else {
+                SuggestedCrewMemberUi(
+                    rowerId = rower.id,
+                    fullName = fullName,
+                    reason = when {
+                        boatSuggestionUsed && crewSuggestionUsed -> "Souvent utilise avec ce bateau et cet equipage"
+                        boatSuggestionUsed -> "Souvent utilise avec ce bateau"
+                        crewSuggestionUsed -> "Souvent associe a cet equipage"
+                        else -> "Suggestion"
+                    },
+                    score = score,
+                )
+            }
+        }.sortedWith(compareByDescending<SuggestedCrewMemberUi> { it.score }.thenBy { it.fullName }).take(5)
+    }
+
+    private fun buildSimilarSessionSuggestion(
+        state: NewSessionUiState,
+        sessions: List<SessionWithDetails>,
+    ): SimilarSessionSuggestionUi? {
+        val candidate = sessions
+            .sortedWith(compareByDescending<SessionWithDetails> { it.session.date }.thenByDescending { it.session.startTime })
+            .firstOrNull { session ->
+                val sessionRowerIds = session.sessionRowers.mapNotNull { it.sessionRower.rowerId }.toSet()
+                when {
+                    state.selectedBoatId != null && state.selectedRowerIds.isNotEmpty() ->
+                        session.boat.id == state.selectedBoatId && sessionRowerIds.intersect(state.selectedRowerIds).isNotEmpty()
+                    state.selectedBoatId != null -> session.boat.id == state.selectedBoatId
+                    state.selectedRowerIds.isNotEmpty() -> sessionRowerIds.intersect(state.selectedRowerIds).isNotEmpty()
+                    else -> false
+                }
+            } ?: return null
+
+        return SimilarSessionSuggestionUi(
+            sessionId = candidate.session.id,
+            title = "Reprendre la derniere sortie similaire",
+            subtitle = "${candidate.boat.name} - ${candidate.rowerNames.joinToString().ifBlank { "Aucun rameur" }}",
+        )
     }
 
     private fun NewSessionUiState.withSeatValidation(): NewSessionUiState {
@@ -714,6 +937,18 @@ class NewSessionViewModel(
         } else {
             copy(errorMessage = null, savedSessionStatus = null)
         }
+    }
+
+    private fun NewSessionUiState.resetPreservingSources(editingSessionId: Long?): NewSessionUiState {
+        return NewSessionUiState(
+            editingSessionId = editingSessionId,
+            availableBoats = availableBoats,
+            availableDestinations = availableDestinations,
+            availableRowers = availableRowers,
+            rowerUsageCounts = rowerUsageCounts,
+            boatUsageCounts = boatUsageCounts,
+            boatStatuses = boatStatuses,
+        )
     }
 
     companion object {
@@ -748,11 +983,11 @@ enum class BoatSelectionStatus {
     IN_REPAIR,
 }
 
-private fun BoatSelectionStatus.label(): String {
+fun BoatSelectionStatus.label(): String {
     return when (this) {
         BoatSelectionStatus.AVAILABLE -> "Disponible"
         BoatSelectionStatus.IN_USE -> "En cours"
-        BoatSelectionStatus.IN_REPAIR -> "En réparation"
+        BoatSelectionStatus.IN_REPAIR -> "En reparation"
     }
 }
 

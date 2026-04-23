@@ -3,8 +3,8 @@ package com.aca56.cahiersortiecodex.feature.newsession.presentation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -15,17 +15,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,25 +42,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.text.KeyboardOptions
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
-import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
+import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppTimePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
+import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 import com.aca56.cahiersortiecodex.ui.components.rememberDoneKeyboardActions
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 
 @Composable
 fun NewSessionRoute(
     contentPadding: PaddingValues,
     onSessionSaved: (SessionStatus) -> Unit,
+    onOpenBoatDetails: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val appContainer = (context.applicationContext as CahierSortieApplication).appContainer
@@ -75,9 +78,11 @@ fun NewSessionRoute(
     NewSessionScreen(
         contentPadding = contentPadding,
         uiState = uiState,
-        screenTitle = "Créer une session",
+        screenTitle = "Nouvelle sortie",
         onDateChanged = viewModel::onDateChanged,
         onBoatSelected = viewModel::onBoatSelected,
+        onForceBoatSelection = viewModel::forceBoatSelection,
+        onDismissBoatConflict = viewModel::dismissBoatConflict,
         onStartTimeChanged = viewModel::onStartTimeChanged,
         onEndTimeChanged = viewModel::onEndTimeChanged,
         onKmChanged = viewModel::onKmChanged,
@@ -90,7 +95,12 @@ fun NewSessionRoute(
         onGuestRowerNameChanged = viewModel::onGuestRowerNameChanged,
         onAddGuestRower = viewModel::addGuestRower,
         onRemoveGuestRower = viewModel::removeGuestRower,
+        onToggleQuickMode = viewModel::toggleQuickMode,
+        onResetForm = viewModel::resetForm,
+        onApplySuggestedCrewMember = viewModel::applySuggestedCrewMember,
+        onApplySimilarSessionSuggestion = viewModel::applySimilarSessionSuggestion,
         onSaveSession = viewModel::saveSession,
+        onOpenBoatDetails = onOpenBoatDetails,
         onDismissFeedback = {
             val savedSessionStatus = uiState.savedSessionStatus
             viewModel.clearFeedback()
@@ -106,6 +116,7 @@ fun EditSessionRoute(
     contentPadding: PaddingValues,
     sessionId: Long,
     onSessionSaved: (SessionStatus) -> Unit,
+    onOpenBoatDetails: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val appContainer = (context.applicationContext as CahierSortieApplication).appContainer
@@ -125,9 +136,11 @@ fun EditSessionRoute(
     NewSessionScreen(
         contentPadding = contentPadding,
         uiState = uiState,
-        screenTitle = "Modifier la session",
+        screenTitle = "Modifier la sortie",
         onDateChanged = viewModel::onDateChanged,
         onBoatSelected = viewModel::onBoatSelected,
+        onForceBoatSelection = viewModel::forceBoatSelection,
+        onDismissBoatConflict = viewModel::dismissBoatConflict,
         onStartTimeChanged = viewModel::onStartTimeChanged,
         onEndTimeChanged = viewModel::onEndTimeChanged,
         onKmChanged = viewModel::onKmChanged,
@@ -140,7 +153,12 @@ fun EditSessionRoute(
         onGuestRowerNameChanged = viewModel::onGuestRowerNameChanged,
         onAddGuestRower = viewModel::addGuestRower,
         onRemoveGuestRower = viewModel::removeGuestRower,
+        onToggleQuickMode = viewModel::toggleQuickMode,
+        onResetForm = viewModel::resetForm,
+        onApplySuggestedCrewMember = viewModel::applySuggestedCrewMember,
+        onApplySimilarSessionSuggestion = viewModel::applySimilarSessionSuggestion,
         onSaveSession = viewModel::saveSession,
+        onOpenBoatDetails = onOpenBoatDetails,
         onDismissFeedback = {
             val savedSessionStatus = uiState.savedSessionStatus
             viewModel.clearFeedback()
@@ -158,6 +176,8 @@ fun NewSessionScreen(
     screenTitle: String,
     onDateChanged: (String) -> Unit,
     onBoatSelected: (Long) -> Unit,
+    onForceBoatSelection: () -> Unit,
+    onDismissBoatConflict: () -> Unit,
     onStartTimeChanged: (String) -> Unit,
     onEndTimeChanged: (String) -> Unit,
     onKmChanged: (String) -> Unit,
@@ -170,7 +190,12 @@ fun NewSessionScreen(
     onGuestRowerNameChanged: (String) -> Unit,
     onAddGuestRower: () -> Unit,
     onRemoveGuestRower: (Long) -> Unit,
+    onToggleQuickMode: () -> Unit,
+    onResetForm: () -> Unit,
+    onApplySuggestedCrewMember: (Long) -> Unit,
+    onApplySimilarSessionSuggestion: () -> Unit,
     onSaveSession: () -> Unit,
+    onOpenBoatDetails: (Long) -> Unit,
     onDismissFeedback: () -> Unit,
 ) {
     var destinationMenuExpanded by remember { mutableStateOf(false) }
@@ -183,8 +208,10 @@ fun NewSessionScreen(
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
     val trackedOnDestinationChanged = rememberInteractionAwareValueChange(onDestinationChanged)
     val trackedOnGuestRowerNameChanged = rememberInteractionAwareValueChange(onGuestRowerNameChanged)
-    val selectedBoatLabel = uiState.selectedBoat?.let { "${it.name} (${it.seatCount} places)" }
-        ?: "Choisir un bateau"
+    val selectedBoatLabel = uiState.selectedBoat?.let {
+        val status = uiState.boatStatuses[it.id]?.label()?.let { label -> " - $label" }.orEmpty()
+        "${it.name} (${it.seatCount} places)$status"
+    } ?: "Choisir un bateau"
     val selectedDestinationLabel = when {
         uiState.isCustomDestination && uiState.destination.isNotBlank() -> "Autre : ${uiState.destination}"
         uiState.selectedDestinationId != null -> uiState.availableDestinations.firstOrNull {
@@ -192,6 +219,7 @@ fun NewSessionScreen(
         }?.name ?: "Choisir une destination"
         else -> "Choisir une destination"
     }
+
     if (showDatePicker) {
         AppDatePickerDialog(
             storageDate = uiState.date,
@@ -202,7 +230,7 @@ fun NewSessionScreen(
 
     if (showTimePicker) {
         AppTimePickerDialog(
-            title = "Choisir l'heure de départ",
+            title = "Choisir l'heure de depart",
             storageTime = uiState.startTime,
             onDismissRequest = { showTimePicker = false },
             onTimeSelected = onStartTimeChanged,
@@ -218,6 +246,32 @@ fun NewSessionScreen(
         )
     }
 
+    uiState.boatConflict?.let { conflict ->
+        AlertDialog(
+            onDismissRequest = onDismissBoatConflict,
+            title = { Text("Bateau deja utilise") },
+            text = { Text("Ce bateau est deja utilise dans une sortie en cours.") },
+            confirmButton = {
+                TextButton(onClick = onForceBoatSelection) {
+                    Text("Forcer")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        onDismissBoatConflict()
+                        onOpenBoatDetails(conflict.boatId)
+                    }) {
+                        Text("Voir la fiche bateau")
+                    }
+                    TextButton(onClick = onDismissBoatConflict) {
+                        Text("Annuler")
+                    }
+                }
+            },
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -228,139 +282,117 @@ fun NewSessionScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Text(
-                text = screenTitle,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
+            HeaderRow(
+                title = screenTitle,
+                showReset = !uiState.isEditMode,
+                onResetForm = {
+                    dismissKeyboard()
+                    onResetForm()
+                },
             )
 
-            SectionCard(
-                title = "Détails de la session",
-                description = "Choisissez la date, les horaires et la destination de la session.",
-            ) {
-                FormGroupTitle("Date")
-                AppSelectorFieldButton(
-                    onClick = {
+            if (!uiState.isEditMode) {
+                ModeToggleCard(
+                    isQuickMode = uiState.isQuickMode,
+                    onToggleQuickMode = {
                         dismissKeyboard()
-                        showDatePicker = true
+                        onToggleQuickMode()
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Date : ${formatDateForDisplay(uiState.date)}")
-                }
+                )
+            }
 
-                FormGroupTitle("Heure de départ")
-                SessionSelectionButton(
-                    onClick = {
-                        dismissKeyboard()
-                        showTimePicker = true
-                    },
-                    modifier = Modifier.fillMaxWidth(),
+            if (!uiState.isQuickMode) {
+                SectionCard(
+                    title = "Informations de sortie",
+                    description = "Renseignez la date, l'heure de depart et la destination.",
                 ) {
-                    Text("Heure de départ : ${uiState.startTime}")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                FormGroupTitle("Heure de fin")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    SessionSelectionButton(
+                    FormGroupTitle("Date")
+                    AppSelectorFieldButton(
                         onClick = {
                             dismissKeyboard()
-                            showEndTimePicker = true
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            if (uiState.endTime.isBlank()) {
-                                "Heure de fin : non définie"
-                            } else {
-                                "Heure de fin : ${uiState.endTime}"
-                            },
-                        )
-                    }
-
-                    if (uiState.endTime.isNotBlank()) {
-                        OutlinedButton(
-                            onClick = {
-                                dismissKeyboard()
-                                onEndTimeChanged("")
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.medium,
-                        ) {
-                            Text("Effacer l'heure de fin")
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                FormGroupTitle("Destination")
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    SessionSelectionButton(
-                        onClick = {
-                            dismissKeyboard()
-                            destinationMenuExpanded = true
+                            showDatePicker = true
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(selectedDestinationLabel)
+                        Text("Date : ${formatDateForDisplay(uiState.date)}")
                     }
 
-                    DropdownMenu(
-                        expanded = destinationMenuExpanded,
-                        onDismissRequest = { destinationMenuExpanded = false },
-                        modifier = Modifier.fillMaxWidth(0.92f),
+                    FormGroupTitle("Heure de depart")
+                    SessionSelectionButton(
+                        onClick = {
+                            dismissKeyboard()
+                            showTimePicker = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Aucune destination") },
+                        Text("Heure de depart : ${uiState.startTime}")
+                    }
+
+                    FormGroupTitle("Destination")
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        SessionSelectionButton(
                             onClick = {
                                 dismissKeyboard()
-                                onDestinationSelected(null)
-                                destinationMenuExpanded = false
+                                destinationMenuExpanded = true
                             },
-                        )
-                        uiState.availableDestinations.forEach { destination ->
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(selectedDestinationLabel)
+                        }
+
+                        DropdownMenu(
+                            expanded = destinationMenuExpanded,
+                            onDismissRequest = { destinationMenuExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.92f),
+                        ) {
                             DropdownMenuItem(
-                                text = { Text(destination.name) },
+                                text = { Text("Aucune destination") },
                                 onClick = {
                                     dismissKeyboard()
-                                    onDestinationSelected(destination.id)
+                                    onDestinationSelected(null)
+                                    destinationMenuExpanded = false
+                                },
+                            )
+                            uiState.availableDestinations.forEach { destination ->
+                                DropdownMenuItem(
+                                    text = { Text(destination.name) },
+                                    onClick = {
+                                        dismissKeyboard()
+                                        onDestinationSelected(destination.id)
+                                        destinationMenuExpanded = false
+                                    },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Autre") },
+                                onClick = {
+                                    dismissKeyboard()
+                                    onCustomDestinationSelected()
                                     destinationMenuExpanded = false
                                 },
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text("Autre") },
-                            onClick = {
-                                dismissKeyboard()
-                                onCustomDestinationSelected()
-                                destinationMenuExpanded = false
-                            },
+                    }
+
+                    if (uiState.isCustomDestination) {
+                        SessionOutlinedTextField(
+                            value = uiState.destination,
+                            onValueChange = trackedOnDestinationChanged,
+                            label = { Text("Destination personnalisee") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
                         )
                     }
                 }
-
-                if (uiState.isCustomDestination) {
-                SessionOutlinedTextField(
-                    value = uiState.destination,
-                    onValueChange = trackedOnDestinationChanged,
-                    label = { Text("Destination personnalisée") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                }
+            } else {
+                QuickModeInfoCard()
             }
 
             SectionCard(
-                title = "Bateau et équipage",
-                description = "Choisissez le bateau et les rameurs pour cette session.",
+                title = "Equipage",
+                description = "Choisissez le bateau et les rameurs.",
             ) {
                 FormGroupTitle("Bateau")
                 Text(
@@ -378,29 +410,21 @@ fun NewSessionScreen(
                         boatSearchQuery.isBlank() || option.label.contains(boatSearchQuery.trim(), ignoreCase = true)
                     },
                     emptyLabel = "Aucun bateau disponible pour le moment.",
-                    noResultsLabel = "Aucun bateau ne correspond à la recherche.",
+                    noResultsLabel = "Aucun bateau ne correspond a la recherche.",
                     onOptionSelected = { selectedKey ->
                         dismissKeyboard()
                         selectedKey.toLongOrNull()?.let(onBoatSelected)
                     },
                 )
 
-                if (uiState.availableBoats.isEmpty()) {
-                    Text(
-                        text = "Aucun bateau disponible pour le moment.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(6.dp))
 
                 FormGroupTitle("Rameurs")
                 Text(
                     text = buildString {
-                        append("Sélectionnés : ${uiState.totalSelectedRowers}")
+                        append("Selectionnes : ${uiState.totalSelectedRowers}")
                         uiState.selectedBoat?.let { append(" / ${it.seatCount} places") }
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -417,8 +441,8 @@ fun NewSessionScreen(
                     searchLabel = "Rechercher des rameurs",
                     selectedKeys = uiState.selectedRowerIds.map { it.toString() }.toSet(),
                     options = uiState.filteredRowerOptions,
-                    emptyLabel = "Aucun rameur enregistré pour le moment.",
-                    noResultsLabel = "Aucun rameur ne correspond à la recherche.",
+                    emptyLabel = "Aucun rameur enregistre pour le moment.",
+                    noResultsLabel = "Aucun rameur ne correspond a la recherche.",
                     onOptionToggled = { optionKey ->
                         dismissKeyboard()
                         optionKey.toLongOrNull()?.let { rowerId ->
@@ -428,93 +452,166 @@ fun NewSessionScreen(
                     },
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Spacer(modifier = Modifier.height(12.dp))
+                if (!uiState.isQuickMode) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                FormGroupTitle("Rameurs invités")
-
-                SessionOutlinedTextField(
-                    value = uiState.guestRowerName,
-                    onValueChange = trackedOnGuestRowerNameChanged,
-                    label = { Text("Nom complet du rameur invité") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-
-                Button(
-                    onClick = {
-                        dismissKeyboard()
-                        onAddGuestRower()
-                    },
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Text("Ajouter un rameur invité")
-                }
-
-                if (uiState.guestRowers.isEmpty()) {
-                    Text(
-                        text = "Aucun rameur invité ajouté.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    FormGroupTitle("Rameurs invites")
+                    SessionOutlinedTextField(
+                        value = uiState.guestRowerName,
+                        onValueChange = trackedOnGuestRowerNameChanged,
+                        label = { Text("Nom complet du rameur invite") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
                     )
-                } else {
-                    uiState.guestRowers.forEach { guest ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(guest.fullName)
-                            OutlinedButton(
-                                onClick = {
+
+                    Button(
+                        onClick = {
+                            dismissKeyboard()
+                            onAddGuestRower()
+                        },
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Text("Ajouter un rameur invite")
+                    }
+
+                    if (uiState.guestRowers.isEmpty()) {
+                        Text(
+                            text = "Aucun rameur invite ajoute.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        uiState.guestRowers.forEach { guest ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(guest.fullName)
+                                OutlinedButton(onClick = {
                                     dismissKeyboard()
                                     onRemoveGuestRower(guest.localId)
-                                },
-                            ) {
-                                Text("Retirer")
+                                }) {
+                                    Text("Retirer")
+                                }
                             }
                         }
                     }
                 }
             }
 
-            SectionCard(
-                title = "Clôture de la session",
-                description = "Ajoutez les informations de clôture si la session est terminée.",
-            ) {
-                Text(
-                    text = if (uiState.derivedStatus.name == "COMPLETED") {
-                        "Cette session sera enregistrée comme TERMINÉE."
-                    } else {
-                        "Cette session sera enregistrée comme EN COURS."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (uiState.suggestedCrew.isNotEmpty() || uiState.similarSessionSuggestion != null) {
+                SectionCard(
+                    title = "Suggestions d'equipage",
+                    description = "Utilisez l'historique local pour aller plus vite.",
+                ) {
+                    uiState.similarSessionSuggestion?.let { suggestion ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = suggestion.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = suggestion.subtitle,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        dismissKeyboard()
+                                        onApplySimilarSessionSuggestion()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Reprendre cette sortie")
+                                }
+                            }
+                        }
+                    }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                    uiState.suggestedCrew.forEach { suggestion ->
+                        SuggestedCrewCard(
+                            suggestion = suggestion,
+                            onApply = {
+                                dismissKeyboard()
+                                onApplySuggestedCrewMember(suggestion.rowerId)
+                            },
+                        )
+                    }
+                }
+            }
 
-                FormGroupTitle("Km")
-                SessionOutlinedTextField(
-                    value = uiState.km,
-                    onValueChange = trackedOnKmChanged,
-                    label = { Text("Km") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
+            if (!uiState.isQuickMode) {
+                SectionCard(
+                    title = "Cloture",
+                    description = "Ajoutez les informations de fin si la sortie est terminee.",
+                ) {
+                    FormGroupTitle("Heure de fin")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        SessionSelectionButton(
+                            onClick = {
+                                dismissKeyboard()
+                                showEndTimePicker = true
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                if (uiState.endTime.isBlank()) {
+                                    "Heure de fin : non definie"
+                                } else {
+                                    "Heure de fin : ${uiState.endTime}"
+                                },
+                            )
+                        }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                        if (uiState.endTime.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    dismissKeyboard()
+                                    onEndTimeChanged("")
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = MaterialTheme.shapes.medium,
+                            ) {
+                                Text("Effacer")
+                            }
+                        }
+                    }
 
-                FormGroupTitle("Remarques")
-                SessionOutlinedTextField(
-                    value = uiState.remarks,
-                    onValueChange = trackedOnRemarksChanged,
-                    label = { Text("Remarques") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                )
+                    FormGroupTitle("Km")
+                    SessionOutlinedTextField(
+                        value = uiState.km,
+                        onValueChange = trackedOnKmChanged,
+                        label = { Text("Km") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+
+                    FormGroupTitle("Remarques")
+                    SessionOutlinedTextField(
+                        value = uiState.remarks,
+                        onValueChange = trackedOnRemarksChanged,
+                        label = { Text("Remarques") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                    )
+                }
             }
 
             Button(
@@ -523,22 +620,21 @@ fun NewSessionScreen(
                     onSaveSession()
                 },
                 enabled = uiState.canSave,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
             ) {
                 Text(
-                    (if (uiState.isSaving) {
-                        "Enregistrement..."
-                    } else if (uiState.isEditMode) {
-                        "Enregistrer les modifications"
-                    } else if (uiState.derivedStatus.name == "COMPLETED") {
-                        "Enregistrer la session comme TERMINÉE"
-                    } else {
-                        "Enregistrer la session comme EN COURS"
-                    }).toString(),
+                    when {
+                        uiState.isSaving -> "Enregistrement..."
+                        uiState.isQuickMode && !uiState.isEditMode -> "Demarrer la sortie"
+                        uiState.isEditMode -> "Enregistrer"
+                        uiState.derivedStatus == SessionStatus.COMPLETED -> "Enregistrer la sortie"
+                        else -> "Demarrer la sortie"
+                    },
                 )
             }
         }
-
     }
 
     uiState.errorMessage?.let { message ->
@@ -555,6 +651,138 @@ fun NewSessionScreen(
             type = FeedbackDialogType.SUCCESS,
             onDismiss = onDismissFeedback,
         )
+    }
+}
+
+@Composable
+private fun HeaderRow(
+    title: String,
+    showReset: Boolean,
+    onResetForm: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (showReset) {
+            OutlinedButton(onClick = onResetForm) {
+                Text("Reinitialiser")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModeToggleCard(
+    isQuickMode: Boolean,
+    onToggleQuickMode: () -> Unit,
+) {
+    SectionCard(
+        title = "Mode de saisie",
+        description = "Choisissez entre une saisie rapide ou une saisie complete.",
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val completeButton: @Composable (Modifier) -> Unit = { modifier ->
+                if (isQuickMode) {
+                    OutlinedButton(
+                        onClick = onToggleQuickMode,
+                        modifier = modifier,
+                    ) {
+                        Text("Mode complet")
+                    }
+                } else {
+                    Button(
+                        onClick = {},
+                        modifier = modifier,
+                        enabled = false,
+                    ) {
+                        Text("Mode complet")
+                    }
+                }
+            }
+            val quickButton: @Composable (Modifier) -> Unit = { modifier ->
+                if (isQuickMode) {
+                    Button(
+                        onClick = {},
+                        modifier = modifier,
+                        enabled = false,
+                    ) {
+                        Text("Mode rapide")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onToggleQuickMode,
+                        modifier = modifier,
+                    ) {
+                        Text("Mode rapide")
+                    }
+                }
+            }
+
+            completeButton(Modifier.weight(1f))
+            quickButton(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun QuickModeInfoCard() {
+    SectionCard(
+        title = "Mode rapide",
+        description = "Seuls le bateau et les rameurs sont affiches. L'heure de depart sera definie automatiquement au demarrage.",
+    ) {
+        Text(
+            text = "Le demarrage de la sortie cree directement une sortie en cours.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SuggestedCrewCard(
+    suggestion: SuggestedCrewMemberUi,
+    onApply: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = suggestion.fullName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = suggestion.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedButton(onClick = onApply) {
+                Text("Ajouter")
+            }
+        }
     }
 }
 

@@ -25,6 +25,21 @@ import androidx.compose.ui.unit.dp
 
 private const val InitialVisibleSelectionCount = 5
 
+@Composable
+private fun selectionSecondaryLabelColor(
+    secondaryLabel: String,
+    isSelected: Boolean,
+): androidx.compose.ui.graphics.Color {
+    val colorScheme = MaterialTheme.colorScheme
+    if (isSelected) return colorScheme.onPrimaryContainer
+    return when {
+        secondaryLabel.contains("reparation", ignoreCase = true) -> colorScheme.error
+        secondaryLabel.contains("cours", ignoreCase = true) -> colorScheme.tertiary
+        secondaryLabel.contains("disponible", ignoreCase = true) -> colorScheme.primary
+        else -> colorScheme.onSurfaceVariant
+    }
+}
+
 data class SearchableSelectableOption(
     val key: String,
     val label: String,
@@ -117,11 +132,10 @@ fun SearchableSelectableList(
                     Text(
                         text = secondaryLabel,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (option.key in selectedKeys) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = selectionSecondaryLabelColor(
+                            secondaryLabel = secondaryLabel,
+                            isSelected = option.key in selectedKeys,
+                        ),
                     )
                 }
             }
@@ -214,11 +228,10 @@ fun SearchableSingleSelectList(
                     Text(
                         text = secondaryLabel,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (option.key == selectedKey) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = selectionSecondaryLabelColor(
+                            secondaryLabel = secondaryLabel,
+                            isSelected = option.key == selectedKey,
+                        ),
                     )
                 }
             }

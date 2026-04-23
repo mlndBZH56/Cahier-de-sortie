@@ -309,5 +309,6 @@ private fun com.aca56.cahiersortiecodex.data.local.entity.SessionStatus.toDispla
     return when (this) {
         com.aca56.cahiersortiecodex.data.local.entity.SessionStatus.ONGOING -> "EN COURS"
         com.aca56.cahiersortiecodex.data.local.entity.SessionStatus.COMPLETED -> "TERMINÉE"
+        com.aca56.cahiersortiecodex.data.local.entity.SessionStatus.NOT_COMPLETED -> "NON TERMINÉE"
     }
 }

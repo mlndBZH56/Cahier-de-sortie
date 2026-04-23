@@ -38,6 +38,19 @@ interface SessionDao {
     @Update
     suspend fun update(session: SessionEntity)
 
+    @Query(
+        """
+        UPDATE sessions
+        SET status = :newStatus
+        WHERE status = :currentStatus AND date < :currentDate
+        """,
+    )
+    suspend fun updateStatusBeforeDate(
+        currentStatus: SessionStatus,
+        newStatus: SessionStatus,
+        currentDate: String,
+    )
+
     @Delete
     suspend fun delete(session: SessionEntity)
 }

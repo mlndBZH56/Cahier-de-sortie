@@ -147,7 +147,7 @@ fun OngoingSessionsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    text = "Sessions en cours",
+                    text = "Sorties en cours",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -160,7 +160,7 @@ fun OngoingSessionsScreen(
                         if (uiState.isBulkSelectionMode) {
                             "Annuler la sélection multiple"
                         } else {
-                            "Sélectionner plusieurs sessions"
+                            "Sélectionner plusieurs sorties"
                         },
                     )
                 }
@@ -251,7 +251,7 @@ private fun BulkSelectionActionCard(
                 text = if (selectedCount == 0) {
                     "Sélectionnez une ou plusieurs sessions ci-dessous."
                 } else {
-                    "$selectedCount session(s) sélectionnée(s)."
+                    "$selectedCount sortie(s) sélectionnée(s)."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -263,7 +263,7 @@ private fun BulkSelectionActionCard(
                 enabled = !isSaving && selectedCount > 0,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Clôturer les sessions sélectionnées")
+                Text("Clôturer les sorties sélectionnées")
             }
         }
     }
@@ -289,7 +289,7 @@ private fun BulkCompletionEditorScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Clôture groupée",
+            text = "Clôture des sorties sélectionnées",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -302,7 +302,7 @@ private fun BulkCompletionEditorScreen(
         }
 
         Text(
-            text = "${uiState.selectedSessionIds.size} session(s) recevront les mêmes valeurs de fin.",
+            text = "${uiState.selectedSessionIds.size} sortie(s) recevront les mêmes valeurs de fin.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -393,7 +393,7 @@ private fun OngoingSessionCard(
 
             if (uiState.isBulkSelectionMode) {
                 Text(
-                    text = if (isSelected) "Session sélectionnée pour la clôture groupée." else "Touchez la case pour inclure cette session.",
+                    text = if (isSelected) "Sortie sélectionnée pour la clôture groupée." else "Touchez la case pour inclure cette sortie.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
@@ -485,7 +485,7 @@ private fun BulkCompletionCard(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "${uiState.selectedSessionIds.size} session(s) sélectionnée(s). Les mêmes valeurs seront appliquées à toutes.",
+                text = "${uiState.selectedSessionIds.size} sortie(s) sélectionnée(s). Les mêmes valeurs seront appliquées à toutes.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
@@ -829,4 +829,3 @@ private fun SessionInlineEditorCard(
     }
 
 }
-
