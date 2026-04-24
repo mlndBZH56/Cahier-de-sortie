@@ -3,19 +3,23 @@ package com.aca56.cahiersortiecodex.feature.boats.presentation
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
-import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
+import androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments
+import androidx.activity.result.contract.ActivityResultContracts.TakePicturePreview
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,10 +27,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -47,14 +55,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.export.DatabaseCsvExporter
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
+import com.aca56.cahiersortiecodex.ui.components.AppImageViewerDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
+import com.aca56.cahiersortiecodex.ui.components.PhotoSourceChooserDialog
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
 
@@ -219,16 +231,27 @@ fun BoatDetailRoute(
             boatRepository = appContainer.boatRepository,
             boatPhotoRepository = appContainer.boatPhotoRepository,
             remarkRepository = appContainer.remarkRepository,
+            repairUpdateRepository = appContainer.repairUpdateRepository,
             sessionRepository = appContainer.sessionRepository,
             boatPhotoStorage = appContainer.boatPhotoStorage,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
+    var showPhotoSourceChooser by remember { mutableStateOf(false) }
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = OpenDocument(),
-    ) { uri ->
-        if (uri != null) {
-            viewModel.addPhoto(uri)
+        contract = OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.addPhotos(uris)
+        } else {
+            viewModel.clearMessage()
+        }
+    }
+    val photoCameraLauncher = rememberLauncherForActivityResult(
+        contract = TakePicturePreview(),
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.addPhoto(bitmap)
         } else {
             viewModel.clearMessage()
         }
@@ -251,12 +274,28 @@ fun BoatDetailRoute(
                     notes = uiState.boat.notes,
                 ),
                 remarks = uiState.boat.remarks,
+                repairUpdates = uiState.boat.repairUpdatesByRemarkId.values.flatten(),
+                boatPhotos = uiState.boat.photos.map { it.filePath },
                 sessions = uiState.boat.allSessionDetails,
             )
             viewModel.clearMessage()
         } else {
             viewModel.clearMessage()
         }
+    }
+
+    if (showPhotoSourceChooser) {
+        PhotoSourceChooserDialog(
+            onDismiss = { showPhotoSourceChooser = false },
+            onTakePhoto = {
+                showPhotoSourceChooser = false
+                photoCameraLauncher.launch(null)
+            },
+            onPickFromGallery = {
+                showPhotoSourceChooser = false
+                photoPickerLauncher.launch(arrayOf("image/*"))
+            },
+        )
     }
 
     BoatDetailScreen(
@@ -277,9 +316,7 @@ fun BoatDetailRoute(
         onCancelEditing = viewModel::cancelEditing,
         onSaveBoat = viewModel::saveBoat,
         onDeletePhoto = viewModel::deletePhoto,
-        onAddPhoto = {
-            photoPickerLauncher.launch(arrayOf("image/*"))
-        },
+        onAddPhoto = { showPhotoSourceChooser = true },
         onOpenSession = onOpenSession,
         onOpenFullHistory = onOpenFullHistory,
         onOpenBoatRemarks = onOpenBoatRemarks,
@@ -323,6 +360,25 @@ fun BoatDetailScreen(
     val trackedOnYearChanged = rememberInteractionAwareValueChange(onYearChanged)
     val trackedOnNotesChanged = rememberInteractionAwareValueChange(onNotesChanged)
     var typeMenuExpanded by remember { mutableStateOf(false) }
+    var selectedPhotoPath by remember { mutableStateOf<String?>(null) }
+    var showPhotoManager by remember { mutableStateOf(false) }
+
+    selectedPhotoPath?.let { photoPath ->
+        BoatPhotoViewerDialog(
+            filePath = photoPath,
+            onDismiss = { selectedPhotoPath = null },
+        )
+    }
+
+    if (showPhotoManager) {
+        BoatPhotoManagerDialog(
+            photos = uiState.boat.photos,
+            onDismiss = { showPhotoManager = false },
+            onAddPhotos = onAddPhoto,
+            onDeletePhoto = onDeletePhoto,
+            onViewPhoto = { selectedPhotoPath = it },
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -559,7 +615,7 @@ fun BoatDetailScreen(
 
             BoatSectionCard(
                 title = "Photos",
-                subtitle = "Ajoutez des photos locales ; elles sont compressées avant l'enregistrement.",
+                subtitle = "Affichez les photos du bateau en miniatures et gérez-les depuis une fenêtre dédiée.",
             ) {
                 if (!uiState.boat.hasPersistentBoat) {
                     Text(
@@ -567,11 +623,11 @@ fun BoatDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Button(
-                        onClick = onAddPhoto,
+                    OutlinedButton(
+                        onClick = { showPhotoManager = true },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Ajouter une photo")
+                        Text("Modifier les photos")
                     }
 
                     if (uiState.boat.photos.isEmpty()) {
@@ -580,32 +636,10 @@ fun BoatDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        uiState.boat.photos.forEach { photo ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    BoatPhotoPreview(photo.filePath)
-                                    Text(
-                                        text = "Ajoutée le ${photo.createdAt.take(10)}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    OutlinedButton(
-                                        onClick = { onDeletePhoto(photo.id) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text("Supprimer la photo")
-                                    }
-                                }
-                            }
-                        }
+                        BoatPhotoThumbnailGrid(
+                            photos = uiState.boat.photos,
+                            onPhotoClick = { selectedPhotoPath = it },
+                        )
                     }
                 }
             }
@@ -937,24 +971,192 @@ private fun BoatStatusBadge(
 }
 
 @Composable
+private fun BoatPhotoThumbnailGrid(
+    photos: List<BoatPhotoUi>,
+    onPhotoClick: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        photos.chunked(3).forEach { rowPhotos ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                rowPhotos.forEach { photo ->
+                    BoatPhotoThumbnail(
+                        filePath = photo.filePath,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onPhotoClick(photo.filePath) },
+                    )
+                }
+                repeat(3 - rowPhotos.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoatPhotoThumbnail(
+    filePath: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val bitmap = remember(filePath) { BitmapFactory.decodeFile(filePath) }
+    Surface(
+        modifier = modifier
+            .height(120.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Miniature du bateau",
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "Photo indisponible",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoatPhotoManagerDialog(
+    photos: List<BoatPhotoUi>,
+    onDismiss: () -> Unit,
+    onAddPhotos: () -> Unit,
+    onDeletePhoto: (Long) -> Unit,
+    onViewPhoto: (String) -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 8.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Modifier les photos",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Button(
+                    onClick = onAddPhotos,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Ajouter des photos")
+                }
+                if (photos.isEmpty()) {
+                    Text(
+                        text = "Aucune photo enregistrée.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    photos.forEach { photo ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                BoatPhotoThumbnail(
+                                    filePath = photo.filePath,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { onViewPhoto(photo.filePath) },
+                                )
+                                Text(
+                                    text = "Ajoutée le ${photo.createdAt.take(10)}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                OutlinedButton(
+                                    onClick = { onDeletePhoto(photo.id) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Supprimer la photo")
+                                }
+                            }
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Fermer")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoatPhotoViewerDialog(
+    filePath: String,
+    onDismiss: () -> Unit,
+) {
+    AppImageViewerDialog(
+        filePath = filePath,
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
 private fun BoatPhotoPreview(
     filePath: String,
+    modifier: Modifier = Modifier,
 ) {
     val bitmap = remember(filePath) { BitmapFactory.decodeFile(filePath) }
 
     if (bitmap != null) {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Photo du bateau",
-            modifier = Modifier
+        Box(
+            modifier = modifier
                 .fillMaxWidth()
-                .height(220.dp)
-                .clip(RoundedCornerShape(16.dp)),
-            contentScale = ContentScale.Crop,
-        )
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Photo du bateau",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat()),
+                contentScale = ContentScale.Fit,
+            )
+        }
     } else {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .height(140.dp)
                 .clip(RoundedCornerShape(16.dp))
@@ -974,7 +1176,7 @@ private val BoatTypeOptions = listOf("1x", "2-", "2x", "2+", "4-", "4x", "4+", "
 private fun BoatStatusUi.label(): String {
     return when (this) {
         BoatStatusUi.AVAILABLE -> "Disponible"
-        BoatStatusUi.IN_USE -> "Déjà utilisé"
+        BoatStatusUi.IN_USE -> "En cours d'utilisation"
         BoatStatusUi.IN_REPAIR -> "En réparation"
     }
 }

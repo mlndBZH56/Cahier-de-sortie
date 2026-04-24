@@ -11,10 +11,12 @@ import com.aca56.cahiersortiecodex.data.export.SessionCsvExporter
 import com.aca56.cahiersortiecodex.data.importing.BoatImportParser
 import com.aca56.cahiersortiecodex.data.importing.RowerImportParser
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
+import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
+import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
@@ -110,6 +112,7 @@ data class SettingsUiState(
     val successPopupDurationSecondsInput: String = formatSeconds(DefaultSuccessPopupDurationMillis),
     val errorPopupDurationSecondsInput: String = formatSeconds(DefaultErrorPopupDurationMillis),
     val animationsEnabled: Boolean = true,
+    val crewsEnabled: Boolean = false,
     val isWorking: Boolean = false,
     val message: String? = null,
     val messageType: FeedbackDialogType? = null,
@@ -303,6 +306,7 @@ class SettingsViewModel(
                 successPopupDurationSecondsInput = formatSeconds(preferences.successPopupDurationMillis),
                 errorPopupDurationSecondsInput = formatSeconds(preferences.errorPopupDurationMillis),
                 animationsEnabled = preferences.animationsEnabled,
+                crewsEnabled = preferences.crewsEnabled,
                 selectedExportRowers = if (shouldRequirePin) emptySet() else it.selectedExportRowers,
                 exportRowerSearchQuery = if (shouldRequirePin) "" else it.exportRowerSearchQuery,
                 selectedExportBoatIds = if (shouldRequirePin) emptySet() else it.selectedExportBoatIds,
@@ -384,6 +388,10 @@ class SettingsViewModel(
 
     fun onAnimationsEnabledChanged(value: Boolean) {
         uiStateMutable.update { it.copy(animationsEnabled = value, message = null, messageType = null) }
+    }
+
+    fun onCrewsEnabledChanged(value: Boolean) {
+        uiStateMutable.update { it.copy(crewsEnabled = value, message = null, messageType = null) }
     }
 
     fun onPrimaryColorChanged(value: String) {
@@ -528,21 +536,6 @@ class SettingsViewModel(
         }
     }
 
-    fun exportBackup(uri: Uri) {
-        launchWork(
-            onErrorMessage = "Impossible de créer le fichier ZIP de sauvegarde.",
-            block = {
-                withContext(Dispatchers.IO) {
-                    backupManager.exportToZip(
-                        contentResolver = application.contentResolver,
-                        uri = uri,
-                    )
-                }
-            },
-            onSuccessMessage = "Le fichier ZIP de sauvegarde a été créé avec succès.",
-        )
-    }
-
     fun restoreBackup(uri: Uri) {
         launchWork(
             onErrorMessage = "Impossible de restaurer la base de données depuis le fichier ZIP.",
@@ -562,21 +555,6 @@ class SettingsViewModel(
                     messageType = null,
                 )
             },
-        )
-    }
-
-    fun exportDebugReport(uri: Uri) {
-        launchWork(
-            onErrorMessage = "Impossible d'exporter le rapport de diagnostic.",
-            block = {
-                val report = buildDebugReport()
-                withContext(Dispatchers.IO) {
-                    application.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
-                        writer.write(report)
-                    } ?: error("Unable to open debug report output stream.")
-                }
-            },
-            onSuccessMessage = "Le rapport de diagnostic a été exporté avec succès.",
         )
     }
 
@@ -723,29 +701,72 @@ class SettingsViewModel(
         }
     }
 
-    fun exportAllSessions(uri: Uri) {
-        val sessions = uiState.value.exportableSessions
+    fun exportFullDatabase(uri: Uri) {
         launchWork(
-            onErrorMessage = "Impossible d'exporter les sessions.",
+            onErrorMessage = "Impossible d'exporter toute la base de données.",
             block = {
+                withContext(Dispatchers.IO) {
+                    backupManager.exportToZip(
+                        contentResolver = application.contentResolver,
+                        uri = uri,
+                        remarks = application.appContainer.remarkRepository.observeRemarks().first(),
+                        repairUpdates = application.appContainer.repairUpdateRepository.observeUpdates().first(),
+                        boatPhotos = application.appContainer.boatPhotoRepository.observePhotos().first(),
+                    )
+                }
+            },
+            onSuccessMessage = "La sauvegarde complète de l'application a été exportée avec succès.",
+        )
+    }
+
+    fun exportSessions(uri: Uri) {
+        launchWork(
+            onErrorMessage = "Impossible d'exporter les sorties.",
+            block = {
+                val sessionsToExport = uiState.value.filteredExportableSessions
                 withContext(Dispatchers.IO) {
                     SessionCsvExporter.exportHistorySessions(
                         contentResolver = application.contentResolver,
                         uri = uri,
-                        sessions = sessions,
+                        sessions = sessionsToExport,
                     )
                 }
             },
-            onSuccessMessage = "Toutes les sessions ont été exportées avec succès.",
+            onSuccessMessage = "Les sorties ont été exportées avec succès.",
         )
     }
 
-    fun exportFilteredSessions(uri: Uri) {
-        val sessions = uiState.value.filteredExportableSessions
-        if (sessions.isEmpty()) {
+    fun exportAllBoats(uri: Uri) {
+        launchWork(
+            onErrorMessage = "Impossible d'exporter les bateaux.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    val remarks = application.appContainer.remarkRepository.observeRemarks().first()
+                    val repairUpdates = application.appContainer.repairUpdateRepository.observeUpdates().first()
+                    val sessions = sessionRepository.observeSessionsWithDetails().first()
+                    val boatPhotos = application.appContainer.boatPhotoRepository.observePhotos().first()
+
+                    DatabaseCsvExporter.exportBoatSheets(
+                        contentResolver = application.contentResolver,
+                        uri = uri,
+                        boats = uiState.value.boatManagement.boats,
+                        remarks = remarks,
+                        repairUpdates = repairUpdates,
+                        sessions = sessions,
+                        boatPhotos = boatPhotos,
+                    )
+                }
+            },
+            onSuccessMessage = "Les fiches bateaux ont été exportées avec succès.",
+        )
+    }
+
+    fun exportSingleBoat(uri: Uri, boatId: Long) {
+        val boat = uiState.value.boatManagement.boats.firstOrNull { it.id == boatId }
+        if (boat == null) {
             uiStateMutable.update {
                 it.copy(
-                    message = "Aucune session ne correspond aux filtres d'export actuels.",
+                    message = "Le bateau sélectionné est introuvable.",
                     messageType = FeedbackDialogType.ERROR,
                 )
             }
@@ -753,56 +774,92 @@ class SettingsViewModel(
         }
 
         launchWork(
-            onErrorMessage = "Impossible d'exporter les sessions filtrées.",
+            onErrorMessage = "Impossible d'exporter cette fiche bateau.",
             block = {
                 withContext(Dispatchers.IO) {
-                    SessionCsvExporter.exportHistorySessions(
+                    val remarks = application.appContainer.remarkRepository.observeRemarks().first()
+                        .filter { it.boatId == boatId }
+                    val repairUpdates = application.appContainer.repairUpdateRepository.observeUpdates().first()
+                    val sessions = sessionRepository.observeSessionsWithDetails().first()
+                    val boatPhotoPaths = application.appContainer.boatPhotoRepository.observePhotos().first()
+                        .filter { it.boatId == boatId }
+                        .map(BoatPhotoEntity::filePath)
+
+                    DatabaseCsvExporter.exportSingleBoatSheet(
                         contentResolver = application.contentResolver,
                         uri = uri,
+                        boat = boat,
+                        remarks = remarks,
+                        repairUpdates = repairUpdates,
+                        boatPhotos = boatPhotoPaths,
                         sessions = sessions,
                     )
                 }
             },
-            onSuccessMessage = "Les sessions filtrées ont été exportées avec succès.",
+            onSuccessMessage = "La fiche bateau a été exportée avec succès.",
         )
     }
 
-    fun exportFullDatabase(uri: Uri) {
+    fun exportRemarks(uri: Uri, repairsOnly: Boolean, boatId: Long?) {
         launchWork(
-            onErrorMessage = "Impossible d'exporter toute la base de données.",
+            onErrorMessage = "Impossible d'exporter les remarques.",
             block = {
                 withContext(Dispatchers.IO) {
-                    val currentState = uiState.value
-                    DatabaseCsvExporter.exportFullDatabase(
+                    DatabaseCsvExporter.exportRemarks(
                         contentResolver = application.contentResolver,
                         uri = uri,
-                        sessions = sessionRepository.observeSessionsWithDetails().first(),
-                        rowers = currentState.rowerManagement.rowers,
-                        boats = currentState.boatManagement.boats,
-                        destinations = currentState.destinationManagement.destinations,
                         remarks = application.appContainer.remarkRepository.observeRemarks().first(),
+                        boats = uiState.value.boatManagement.boats,
+                        repairUpdates = application.appContainer.repairUpdateRepository.observeUpdates().first(),
+                        repairsOnly = repairsOnly,
+                        boatId = boatId,
                     )
                 }
             },
-            onSuccessMessage = "Toute la base de données a été exportée avec succès.",
+            onSuccessMessage = "Les remarques ont été exportées avec succès.",
         )
     }
 
-    fun exportBoatSheets(uri: Uri) {
+    fun exportRowers(uri: Uri) {
         launchWork(
-            onErrorMessage = "Impossible d'exporter les fiches bateaux.",
+            onErrorMessage = "Impossible d'exporter les rameurs.",
             block = {
                 withContext(Dispatchers.IO) {
-                    val currentState = uiState.value
-                    DatabaseCsvExporter.exportBoatSheets(
+                    DatabaseCsvExporter.exportRowers(
                         contentResolver = application.contentResolver,
                         uri = uri,
-                        boats = currentState.boatManagement.boats,
-                        remarks = application.appContainer.remarkRepository.observeRemarks().first(),
+                        rowers = uiState.value.rowerManagement.rowers,
                     )
                 }
             },
-            onSuccessMessage = "Les fiches bateaux ont été exportées avec succès.",
+            onSuccessMessage = "Les rameurs ont été exportés avec succès.",
+        )
+    }
+
+    fun exportCrews(uri: Uri) {
+        if (!uiState.value.crewsEnabled) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Les équipages sont désactivés.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return
+        }
+
+        launchWork(
+            onErrorMessage = "Impossible d'exporter les équipages.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    DatabaseCsvExporter.exportCrews(
+                        contentResolver = application.contentResolver,
+                        uri = uri,
+                        crews = application.appContainer.crewStore.currentCrews(),
+                        rowers = uiState.value.rowerManagement.rowers,
+                    )
+                }
+            },
+            onSuccessMessage = "Les équipages ont été exportés avec succès.",
         )
     }
 
@@ -1034,6 +1091,7 @@ class SettingsViewModel(
             successPopupDurationMillis = appPreferencesStore.currentPreferences().successPopupDurationMillis,
             errorPopupDurationMillis = appPreferencesStore.currentPreferences().errorPopupDurationMillis,
             animationsEnabled = uiState.value.animationsEnabled,
+            crewsEnabled = uiState.value.crewsEnabled,
         )
         loadAppPreferencesIntoState(message = "Le comportement de l'application a été enregistré.")
     }
@@ -1121,6 +1179,7 @@ class SettingsViewModel(
             successPopupDurationMillis = successDurationMillis,
             errorPopupDurationMillis = errorDurationMillis,
             animationsEnabled = preferences.animationsEnabled,
+            crewsEnabled = preferences.crewsEnabled,
         )
         loadAppPreferencesIntoState(message = "Les paramètres de notification ont été enregistrés.")
     }
@@ -1745,7 +1804,7 @@ class SettingsViewModel(
         repairUpdates
             .filter { it.remarkId in remarkIdsToDelete }
             .forEach { update ->
-                update.photoPath?.let(boatPhotoStorage::deletePhoto)
+                decodeRemarkPhotoPaths(update.photoPath).forEach(boatPhotoStorage::deletePhoto)
                 repairUpdateRepository.deleteUpdate(update)
             }
 
@@ -1786,41 +1845,10 @@ class SettingsViewModel(
                 successPopupDurationSecondsInput = formatSeconds(preferences.successPopupDurationMillis),
                 errorPopupDurationSecondsInput = formatSeconds(preferences.errorPopupDurationMillis),
                 animationsEnabled = preferences.animationsEnabled,
+                crewsEnabled = preferences.crewsEnabled,
                 message = message ?: it.message,
                 messageType = if (message == null) it.messageType else FeedbackDialogType.SUCCESS,
             )
-        }
-    }
-
-    private fun buildDebugReport(): String {
-        val preferences = appPreferencesStore.currentPreferences()
-        val state = uiState.value
-
-        return buildString {
-            appendLine("Rapport de diagnostic Cahier Sortie")
-            appendLine("genereLe=${System.currentTimeMillis()}")
-            appendLine(
-                "modeTheme=${
-                    when (preferences.themeMode) {
-                        ThemeMode.SYSTEM -> "SYSTÈME"
-                        ThemeMode.LIGHT -> "CLAIR"
-                        ThemeMode.DARK -> "SOMBRE"
-                    }
-                }",
-            )
-            appendLine("couleurPrincipale=${preferences.primaryColorHex}")
-            appendLine("couleurSecondaire=${preferences.secondaryColorHex}")
-            appendLine("couleurTertiaire=${preferences.tertiaryColorHex}")
-            appendLine("delaiInactiviteMillis=${preferences.inactivityTimeoutMillis}")
-            appendLine("dureePopupSuccesMillis=${preferences.successPopupDurationMillis}")
-            appendLine("dureePopupErreurMillis=${preferences.errorPopupDurationMillis}")
-            appendLine("animationsActivees=${preferences.animationsEnabled}")
-            appendLine("codePinNormalDefini=${pinCodeStore.hasPin()}")
-            appendLine("rameurs=${state.rowerManagement.rowers.size}")
-            appendLine("bateaux=${state.boatManagement.boats.size}")
-            appendLine("destinations=${state.destinationManagement.destinations.size}")
-            appendLine("sessions=${state.exportableSessions.size}")
-            appendLine("sessionsFiltrees=${state.filteredExportableSessions.size}")
         }
     }
 

@@ -27,6 +27,7 @@ data class AppPreferences(
     val successPopupDurationMillis: Long = DefaultSuccessPopupDurationMillis,
     val errorPopupDurationMillis: Long = DefaultErrorPopupDurationMillis,
     val animationsEnabled: Boolean = true,
+    val crewsEnabled: Boolean = false,
 )
 
 class AppPreferencesStore(context: Context) {
@@ -62,18 +63,35 @@ class AppPreferencesStore(context: Context) {
         successPopupDurationMillis: Long,
         errorPopupDurationMillis: Long,
         animationsEnabled: Boolean,
+        crewsEnabled: Boolean,
     ) {
         preferences.edit()
             .putLong(KEY_INACTIVITY_TIMEOUT_MILLIS, inactivityTimeoutMillis)
             .putLong(KEY_SUCCESS_POPUP_DURATION_MILLIS, successPopupDurationMillis)
             .putLong(KEY_ERROR_POPUP_DURATION_MILLIS, errorPopupDurationMillis)
             .putBoolean(KEY_ANIMATIONS_ENABLED, animationsEnabled)
+            .putBoolean(KEY_CREWS_ENABLED, crewsEnabled)
             .apply()
         refresh()
     }
 
     fun resetToDefaults() {
         preferences.edit().clear().apply()
+        refresh()
+    }
+
+    fun restorePreferences(appPreferences: AppPreferences) {
+        preferences.edit()
+            .putString(KEY_THEME_MODE, appPreferences.themeMode.name)
+            .putString(KEY_PRIMARY_COLOR_HEX, normalizeHex(appPreferences.primaryColorHex))
+            .putString(KEY_SECONDARY_COLOR_HEX, normalizeHex(appPreferences.secondaryColorHex))
+            .putString(KEY_TERTIARY_COLOR_HEX, normalizeHex(appPreferences.tertiaryColorHex))
+            .putLong(KEY_INACTIVITY_TIMEOUT_MILLIS, appPreferences.inactivityTimeoutMillis)
+            .putLong(KEY_SUCCESS_POPUP_DURATION_MILLIS, appPreferences.successPopupDurationMillis)
+            .putLong(KEY_ERROR_POPUP_DURATION_MILLIS, appPreferences.errorPopupDurationMillis)
+            .putBoolean(KEY_ANIMATIONS_ENABLED, appPreferences.animationsEnabled)
+            .putBoolean(KEY_CREWS_ENABLED, appPreferences.crewsEnabled)
+            .apply()
         refresh()
     }
 
@@ -116,6 +134,10 @@ class AppPreferencesStore(context: Context) {
                 KEY_ANIMATIONS_ENABLED,
                 true,
             ),
+            crewsEnabled = preferences.getBoolean(
+                KEY_CREWS_ENABLED,
+                false,
+            ),
         )
     }
 
@@ -134,5 +156,6 @@ class AppPreferencesStore(context: Context) {
         private const val KEY_SUCCESS_POPUP_DURATION_MILLIS = "success_popup_duration_millis"
         private const val KEY_ERROR_POPUP_DURATION_MILLIS = "error_popup_duration_millis"
         private const val KEY_ANIMATIONS_ENABLED = "animations_enabled"
+        private const val KEY_CREWS_ENABLED = "crews_enabled"
     }
 }

@@ -8,6 +8,7 @@ sealed class AppDestination(
     data object NewSession : AppDestination("new_session", "Nouvelle session")
     data object OngoingSessions : AppDestination("ongoing_sessions", "Sessions en cours")
     data object Boats : AppDestination("boats", "Bateaux")
+    data object Crews : AppDestination("crews", "Équipages")
     data object BoatDetail : AppDestination("boat_detail?boatId={boatId}", "Détails du bateau") {
         fun createRoute(boatId: Long? = null): String {
             return if (boatId == null) {
@@ -61,6 +62,7 @@ val allDestinations = listOf(
     AppDestination.NewSession,
     AppDestination.OngoingSessions,
     AppDestination.Boats,
+    AppDestination.Crews,
     AppDestination.BoatDetail,
     AppDestination.History,
     AppDestination.HistoryDetail,
@@ -78,6 +80,7 @@ val topLevelDestinations = listOf(
     AppDestination.NewSession,
     AppDestination.OngoingSessions,
     AppDestination.Boats,
+    AppDestination.Crews,
     AppDestination.History,
     AppDestination.Remarks,
     AppDestination.Stats,

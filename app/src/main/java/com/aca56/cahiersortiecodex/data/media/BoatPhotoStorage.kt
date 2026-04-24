@@ -15,11 +15,7 @@ import kotlin.math.roundToInt
 class BoatPhotoStorage(
     private val context: Context,
 ) {
-    fun importCompressedPhoto(uri: Uri): String {
-        val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input)
-        } ?: error("Impossible de lire l'image sélectionnée.")
-
+    fun saveCompressedBitmap(bitmap: Bitmap): String {
         val scaledBitmap = bitmap.scaleDownIfNeeded(maxSize = 1600)
         val outputFile = File(photoDirectory(), buildFileName())
 
@@ -31,13 +27,22 @@ class BoatPhotoStorage(
         }
 
         if (scaledBitmap !== bitmap) {
-            bitmap.recycle()
             scaledBitmap.recycle()
-        } else {
-            bitmap.recycle()
         }
 
         return outputFile.absolutePath
+    }
+
+    fun importCompressedPhoto(uri: Uri): String {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input)
+        } ?: error("Impossible de lire l'image sélectionnée.")
+
+        return try {
+            saveCompressedBitmap(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     fun deletePhoto(path: String) {

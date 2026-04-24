@@ -41,6 +41,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.settings.ThemeMode
+import com.aca56.cahiersortiecodex.feature.settings.presentation.DataCleanupPeriod
 import com.aca56.cahiersortiecodex.ui.components.AppTextField
 import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
@@ -48,6 +49,8 @@ import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
+import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableOption
+import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
 import java.text.SimpleDateFormat
@@ -61,43 +64,66 @@ fun SettingsRoute(
     onOpenRowers: () -> Unit,
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
+    onOpenCrews: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var pendingSingleBoatExportId by remember { mutableStateOf<Long?>(null) }
+    var pendingRemarksRepairsOnly by remember { mutableStateOf(false) }
+    var pendingRemarksBoatId by remember { mutableStateOf<Long?>(null) }
 
-    val backupExportLauncher = rememberLauncherForActivityResult(
-        contract = CreateDocument("application/zip"),
-    ) { uri ->
-        uri?.let(viewModel::exportBackup) ?: viewModel.clearMessage()
-    }
     val restoreLauncher = rememberLauncherForActivityResult(
         contract = OpenDocument(),
     ) { uri ->
         uri?.let(viewModel::restoreBackup) ?: viewModel.clearMessage()
-    }
-    val allSessionsExportLauncher = rememberLauncherForActivityResult(
-        contract = CreateDocument("text/csv"),
-    ) { uri ->
-        uri?.let(viewModel::exportAllSessions) ?: viewModel.clearMessage()
-    }
-    val filteredSessionsExportLauncher = rememberLauncherForActivityResult(
-        contract = CreateDocument("text/csv"),
-    ) { uri ->
-        uri?.let(viewModel::exportFilteredSessions) ?: viewModel.clearMessage()
     }
     val fullDatabaseExportLauncher = rememberLauncherForActivityResult(
         contract = CreateDocument("application/zip"),
     ) { uri ->
         uri?.let(viewModel::exportFullDatabase) ?: viewModel.clearMessage()
     }
-    val boatSheetsExportLauncher = rememberLauncherForActivityResult(
+    val sessionsExportLauncher = rememberLauncherForActivityResult(
         contract = CreateDocument("text/csv"),
     ) { uri ->
-        uri?.let(viewModel::exportBoatSheets) ?: viewModel.clearMessage()
+        uri?.let(viewModel::exportSessions) ?: viewModel.clearMessage()
     }
-    val debugReportExportLauncher = rememberLauncherForActivityResult(
-        contract = CreateDocument("text/plain"),
+    val allBoatsExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("application/zip"),
     ) { uri ->
-        uri?.let(viewModel::exportDebugReport) ?: viewModel.clearMessage()
+        uri?.let(viewModel::exportAllBoats) ?: viewModel.clearMessage()
+    }
+    val singleBoatExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("application/zip"),
+    ) { uri ->
+        val boatId = pendingSingleBoatExportId
+        pendingSingleBoatExportId = null
+        if (uri != null && boatId != null) {
+            viewModel.exportSingleBoat(uri, boatId)
+        } else {
+            viewModel.clearMessage()
+        }
+    }
+    val remarksExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("text/csv"),
+    ) { uri ->
+        val repairsOnly = pendingRemarksRepairsOnly
+        val boatId = pendingRemarksBoatId
+        pendingRemarksRepairsOnly = false
+        pendingRemarksBoatId = null
+        if (uri != null) {
+            viewModel.exportRemarks(uri, repairsOnly, boatId)
+        } else {
+            viewModel.clearMessage()
+        }
+    }
+    val rowersExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("text/csv"),
+    ) { uri ->
+        uri?.let(viewModel::exportRowers) ?: viewModel.clearMessage()
+    }
+    val crewsExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("text/csv"),
+    ) { uri ->
+        uri?.let(viewModel::exportCrews) ?: viewModel.clearMessage()
     }
 
     SettingsScreen(
@@ -115,6 +141,7 @@ fun SettingsRoute(
         onSuccessPopupDurationSecondsChanged = viewModel::onSuccessPopupDurationSecondsChanged,
         onErrorPopupDurationSecondsChanged = viewModel::onErrorPopupDurationSecondsChanged,
         onAnimationsEnabledChanged = viewModel::onAnimationsEnabledChanged,
+        onCrewsEnabledChanged = viewModel::onCrewsEnabledChanged,
         onPrimaryColorChanged = viewModel::onPrimaryColorChanged,
         onSecondaryColorChanged = viewModel::onSecondaryColorChanged,
         onTertiaryColorChanged = viewModel::onTertiaryColorChanged,
@@ -143,38 +170,50 @@ fun SettingsRoute(
         onEditDestination = viewModel::startEditingDestination,
         onCancelDestinationEditing = viewModel::cancelDestinationEditing,
         onDeleteDestination = viewModel::deleteDestination,
+        onCleanupSessionsEnabledChanged = viewModel::onCleanupSessionsEnabledChanged,
+        onCleanupRemarksEnabledChanged = viewModel::onCleanupRemarksEnabledChanged,
+        onCleanupPeriodChanged = viewModel::onCleanupPeriodChanged,
+        onCleanupCustomCutoffDateChanged = viewModel::onCleanupCustomCutoffDateChanged,
+        onPreviewDataCleanup = viewModel::previewDataCleanup,
+        onDismissCleanupPreview = viewModel::dismissCleanupPreview,
+        onPerformDataCleanup = viewModel::performDataCleanup,
         onExportRowerSearchQueryChanged = viewModel::onExportRowerSearchQueryChanged,
         onExportRowerSelected = viewModel::onExportRowerSelected,
         onExportBoatSearchQueryChanged = viewModel::onExportBoatSearchQueryChanged,
         onExportBoatSelected = viewModel::onExportBoatSelected,
-        onExportDestinationSearchQueryChanged = viewModel::onExportDestinationSearchQueryChanged,
-        onExportDestinationSelected = viewModel::onExportDestinationSelected,
         onExportDateFromChanged = viewModel::onExportDateFromChanged,
         onExportDateToChanged = viewModel::onExportDateToChanged,
         onClearExportFilters = viewModel::clearExportFilters,
-        onExportAllSessions = {
-            viewModel.clearMessage()
-            allSessionsExportLauncher.launch(defaultSessionExportFileName())
-        },
-        onExportFilteredSessions = {
-            viewModel.clearMessage()
-            filteredSessionsExportLauncher.launch(defaultFilteredSessionExportFileName())
-        },
         onExportFullDatabase = {
             viewModel.clearMessage()
             fullDatabaseExportLauncher.launch(defaultFullDatabaseExportFileName())
         },
-        onExportBoatSheets = {
+        onExportSessions = {
             viewModel.clearMessage()
-            boatSheetsExportLauncher.launch(defaultBoatSheetsExportFileName())
+            sessionsExportLauncher.launch(defaultSessionsExportFileName())
         },
-        onExportBackup = {
+        onExportAllBoats = {
             viewModel.clearMessage()
-            backupExportLauncher.launch(defaultBackupFileName())
+            allBoatsExportLauncher.launch(defaultBoatSheetsExportFileName())
         },
-        onExportDebugReport = {
+        onExportSingleBoat = { boatId ->
+            pendingSingleBoatExportId = boatId
             viewModel.clearMessage()
-            debugReportExportLauncher.launch(defaultDebugReportFileName())
+            singleBoatExportLauncher.launch(defaultSingleBoatExportFileName())
+        },
+        onExportRemarks = { repairsOnly, boatId ->
+            pendingRemarksRepairsOnly = repairsOnly
+            pendingRemarksBoatId = boatId
+            viewModel.clearMessage()
+            remarksExportLauncher.launch(defaultRemarksExportFileName())
+        },
+        onExportRowers = {
+            viewModel.clearMessage()
+            rowersExportLauncher.launch(defaultRowersExportFileName())
+        },
+        onExportCrews = {
+            viewModel.clearMessage()
+            crewsExportLauncher.launch(defaultCrewsExportFileName())
         },
         onRestoreBackup = {
             viewModel.clearMessage()
@@ -183,6 +222,7 @@ fun SettingsRoute(
         onOpenRowers = onOpenRowers,
         onOpenBoats = onOpenBoats,
         onOpenDestinations = onOpenDestinations,
+        onOpenCrews = onOpenCrews,
         onDismissRestartAfterRestore = viewModel::dismissRestartAfterRestore,
         onClearMessage = viewModel::clearMessage,
     )
@@ -204,6 +244,7 @@ fun SettingsScreen(
     onSuccessPopupDurationSecondsChanged: (String) -> Unit,
     onErrorPopupDurationSecondsChanged: (String) -> Unit,
     onAnimationsEnabledChanged: (Boolean) -> Unit,
+    onCrewsEnabledChanged: (Boolean) -> Unit,
     onPrimaryColorChanged: (String) -> Unit,
     onSecondaryColorChanged: (String) -> Unit,
     onTertiaryColorChanged: (String) -> Unit,
@@ -232,25 +273,32 @@ fun SettingsScreen(
     onEditDestination: (DestinationEntity) -> Unit,
     onCancelDestinationEditing: () -> Unit,
     onDeleteDestination: (DestinationEntity) -> Unit,
+    onCleanupSessionsEnabledChanged: (Boolean) -> Unit,
+    onCleanupRemarksEnabledChanged: (Boolean) -> Unit,
+    onCleanupPeriodChanged: (DataCleanupPeriod) -> Unit,
+    onCleanupCustomCutoffDateChanged: (String) -> Unit,
+    onPreviewDataCleanup: () -> Unit,
+    onDismissCleanupPreview: () -> Unit,
+    onPerformDataCleanup: (String) -> Boolean,
     onExportRowerSearchQueryChanged: (String) -> Unit,
     onExportRowerSelected: (String, Boolean) -> Unit,
     onExportBoatSearchQueryChanged: (String) -> Unit,
     onExportBoatSelected: (Long, Boolean) -> Unit,
-    onExportDestinationSearchQueryChanged: (String) -> Unit,
-    onExportDestinationSelected: (String, Boolean) -> Unit,
     onExportDateFromChanged: (String) -> Unit,
     onExportDateToChanged: (String) -> Unit,
     onClearExportFilters: () -> Unit,
-    onExportAllSessions: () -> Unit,
-    onExportFilteredSessions: () -> Unit,
     onExportFullDatabase: () -> Unit,
-    onExportBoatSheets: () -> Unit,
-    onExportBackup: () -> Unit,
-    onExportDebugReport: () -> Unit,
+    onExportSessions: () -> Unit,
+    onExportAllBoats: () -> Unit,
+    onExportSingleBoat: (Long) -> Unit,
+    onExportRemarks: (Boolean, Long?) -> Unit,
+    onExportRowers: () -> Unit,
+    onExportCrews: () -> Unit,
     onRestoreBackup: () -> Unit,
     onOpenRowers: () -> Unit,
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
+    onOpenCrews: () -> Unit,
     onDismissRestartAfterRestore: () -> Unit,
     onClearMessage: () -> Unit,
 ) {
@@ -284,6 +332,7 @@ fun SettingsScreen(
             onSuccessPopupDurationSecondsChanged = onSuccessPopupDurationSecondsChanged,
             onErrorPopupDurationSecondsChanged = onErrorPopupDurationSecondsChanged,
             onAnimationsEnabledChanged = onAnimationsEnabledChanged,
+            onCrewsEnabledChanged = onCrewsEnabledChanged,
             onPrimaryColorChanged = onPrimaryColorChanged,
             onSecondaryColorChanged = onSecondaryColorChanged,
             onTertiaryColorChanged = onTertiaryColorChanged,
@@ -310,25 +359,32 @@ fun SettingsScreen(
             onEditDestination = onEditDestination,
             onCancelDestinationEditing = onCancelDestinationEditing,
             onDeleteDestination = onDeleteDestination,
+            onCleanupSessionsEnabledChanged = onCleanupSessionsEnabledChanged,
+            onCleanupRemarksEnabledChanged = onCleanupRemarksEnabledChanged,
+            onCleanupPeriodChanged = onCleanupPeriodChanged,
+            onCleanupCustomCutoffDateChanged = onCleanupCustomCutoffDateChanged,
+            onPreviewDataCleanup = onPreviewDataCleanup,
+            onDismissCleanupPreview = onDismissCleanupPreview,
+            onPerformDataCleanup = onPerformDataCleanup,
             onExportRowerSearchQueryChanged = onExportRowerSearchQueryChanged,
             onExportRowerSelected = onExportRowerSelected,
             onExportBoatSearchQueryChanged = onExportBoatSearchQueryChanged,
             onExportBoatSelected = onExportBoatSelected,
-            onExportDestinationSearchQueryChanged = onExportDestinationSearchQueryChanged,
-            onExportDestinationSelected = onExportDestinationSelected,
             onExportDateFromChanged = onExportDateFromChanged,
             onExportDateToChanged = onExportDateToChanged,
             onClearExportFilters = onClearExportFilters,
-            onExportAllSessions = onExportAllSessions,
-            onExportFilteredSessions = onExportFilteredSessions,
             onExportFullDatabase = onExportFullDatabase,
-            onExportBoatSheets = onExportBoatSheets,
-            onExportBackup = onExportBackup,
-            onExportDebugReport = onExportDebugReport,
+            onExportSessions = onExportSessions,
+            onExportAllBoats = onExportAllBoats,
+            onExportSingleBoat = onExportSingleBoat,
+            onExportRemarks = onExportRemarks,
+            onExportRowers = onExportRowers,
+            onExportCrews = onExportCrews,
             onRestoreBackup = onRestoreBackup,
             onOpenRowers = onOpenRowers,
             onOpenBoats = onOpenBoats,
             onOpenDestinations = onOpenDestinations,
+            onOpenCrews = onOpenCrews,
             onDismissRestartAfterRestore = onDismissRestartAfterRestore,
         )
     }
@@ -492,6 +548,7 @@ private fun SettingsContent(
     onSuccessPopupDurationSecondsChanged: (String) -> Unit,
     onErrorPopupDurationSecondsChanged: (String) -> Unit,
     onAnimationsEnabledChanged: (Boolean) -> Unit,
+    onCrewsEnabledChanged: (Boolean) -> Unit,
     onPrimaryColorChanged: (String) -> Unit,
     onSecondaryColorChanged: (String) -> Unit,
     onTertiaryColorChanged: (String) -> Unit,
@@ -518,30 +575,48 @@ private fun SettingsContent(
     onEditDestination: (DestinationEntity) -> Unit,
     onCancelDestinationEditing: () -> Unit,
     onDeleteDestination: (DestinationEntity) -> Unit,
+    onCleanupSessionsEnabledChanged: (Boolean) -> Unit,
+    onCleanupRemarksEnabledChanged: (Boolean) -> Unit,
+    onCleanupPeriodChanged: (DataCleanupPeriod) -> Unit,
+    onCleanupCustomCutoffDateChanged: (String) -> Unit,
+    onPreviewDataCleanup: () -> Unit,
+    onDismissCleanupPreview: () -> Unit,
+    onPerformDataCleanup: (String) -> Boolean,
     onExportRowerSearchQueryChanged: (String) -> Unit,
     onExportRowerSelected: (String, Boolean) -> Unit,
     onExportBoatSearchQueryChanged: (String) -> Unit,
     onExportBoatSelected: (Long, Boolean) -> Unit,
-    onExportDestinationSearchQueryChanged: (String) -> Unit,
-    onExportDestinationSelected: (String, Boolean) -> Unit,
     onExportDateFromChanged: (String) -> Unit,
     onExportDateToChanged: (String) -> Unit,
     onClearExportFilters: () -> Unit,
-    onExportAllSessions: () -> Unit,
-    onExportFilteredSessions: () -> Unit,
     onExportFullDatabase: () -> Unit,
-    onExportBoatSheets: () -> Unit,
-    onExportBackup: () -> Unit,
-    onExportDebugReport: () -> Unit,
+    onExportSessions: () -> Unit,
+    onExportAllBoats: () -> Unit,
+    onExportSingleBoat: (Long) -> Unit,
+    onExportRemarks: (Boolean, Long?) -> Unit,
+    onExportRowers: () -> Unit,
+    onExportCrews: () -> Unit,
     onRestoreBackup: () -> Unit,
     onOpenRowers: () -> Unit,
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
+    onOpenCrews: () -> Unit,
     onDismissRestartAfterRestore: () -> Unit,
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showResetPinDialog by remember { mutableStateOf(false) }
     var resetPinInput by remember { mutableStateOf("") }
+    var cleanupPinInput by remember { mutableStateOf("") }
+    var showSessionsExportDialog by remember { mutableStateOf(false) }
+    var showRemarksExportDialog by remember { mutableStateOf(false) }
+    var showSingleBoatExportDialog by remember { mutableStateOf(false) }
+    var showExportDateFromPicker by remember { mutableStateOf(false) }
+    var showExportDateToPicker by remember { mutableStateOf(false) }
+    var remarksRepairsOnly by remember { mutableStateOf(false) }
+    var remarksBoatSearchQuery by remember { mutableStateOf("") }
+    var selectedRemarksBoatId by remember { mutableStateOf<Long?>(null) }
+    var singleBoatSearchQuery by remember { mutableStateOf("") }
+    var selectedSingleBoatId by remember { mutableStateOf<Long?>(null) }
 
     if (showResetDialog) {
         AlertDialog(
@@ -619,6 +694,259 @@ private fun SettingsContent(
             },
         )
     }
+
+    uiState.cleanupPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = {
+                cleanupPinInput = ""
+                onDismissCleanupPreview()
+            },
+            title = { Text("Confirmer le nettoyage") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "Éléments à supprimer avant le ${formatDateForDisplay(preview.cutoffDate)} : ${preview.sessionsCount} sortie(s), ${preview.remarksCount} remarque(s).",
+                    )
+                    AppTextField(
+                        value = cleanupPinInput,
+                        onValueChange = { cleanupPinInput = it.filter(Char::isDigit) },
+                        label = "Code PIN super administrateur",
+                        modifier = Modifier.fillMaxWidth(),
+                        type = AppTextFieldType.PIN,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (onPerformDataCleanup(cleanupPinInput)) {
+                            cleanupPinInput = ""
+                        }
+                    },
+                    enabled = !uiState.isWorking,
+                ) {
+                    Text("Supprimer")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        cleanupPinInput = ""
+                        onDismissCleanupPreview()
+                    },
+                ) {
+                    Text("Annuler")
+                }
+            },
+        )
+    }
+
+    if (showSessionsExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showSessionsExportDialog = false },
+            title = { Text("Exporter les sorties") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "Appliquez un ou plusieurs filtres avant l'export CSV. Sans filtre, toutes les sorties seront exportées.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SearchableSelectableList(
+                        searchQuery = uiState.exportBoatSearchQuery,
+                        onSearchQueryChanged = onExportBoatSearchQueryChanged,
+                        searchLabel = "Filtrer par bateau",
+                        selectedKeys = uiState.selectedExportBoatIds.mapTo(mutableSetOf()) { it.toString() },
+                        options = uiState.filteredExportBoatOptions,
+                        emptyLabel = "Aucun bateau disponible.",
+                        noResultsLabel = "Aucun bateau trouvé.",
+                        onOptionToggled = { key ->
+                            key.toLongOrNull()?.let { onExportBoatSelected(it, it !in uiState.selectedExportBoatIds) }
+                        },
+                    )
+                    SearchableSelectableList(
+                        searchQuery = uiState.exportRowerSearchQuery,
+                        onSearchQueryChanged = onExportRowerSearchQueryChanged,
+                        searchLabel = "Filtrer par rameur",
+                        selectedKeys = uiState.selectedExportRowers,
+                        options = uiState.filteredExportRowerOptions,
+                        emptyLabel = "Aucun rameur disponible.",
+                        noResultsLabel = "Aucun rameur trouvé.",
+                        onOptionToggled = { key ->
+                            onExportRowerSelected(key, key !in uiState.selectedExportRowers)
+                        },
+                    )
+                    AppSelectorFieldButton(
+                        onClick = { showExportDateFromPicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Date de début : ${uiState.exportDateFrom.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}")
+                    }
+                    AppSelectorFieldButton(
+                        onClick = { showExportDateToPicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Date de fin : ${uiState.exportDateTo.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = onClearExportFilters,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Réinitialiser")
+                        }
+                        Button(
+                            onClick = {
+                                showSessionsExportDialog = false
+                                onExportSessions()
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Exporter")
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSessionsExportDialog = false }) {
+                    Text("Fermer")
+                }
+            },
+        )
+    }
+
+    if (showRemarksExportDialog) {
+        val boatOptions = uiState.boatManagement.boats
+            .sortedBy { it.name.lowercase() }
+            .map { SearchableSelectableOption(key = it.id.toString(), label = it.name) }
+        AlertDialog(
+            onDismissRequest = { showRemarksExportDialog = false },
+            title = { Text("Exporter les remarques") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Réparations uniquement")
+                            Text(
+                                "Activez pour n’exporter que les remarques de maintenance.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = remarksRepairsOnly,
+                            onCheckedChange = { remarksRepairsOnly = it },
+                        )
+                    }
+                    SearchableSingleSelectList(
+                        searchQuery = remarksBoatSearchQuery,
+                        onSearchQueryChanged = { remarksBoatSearchQuery = it },
+                        searchLabel = "Filtrer par bateau",
+                        selectedKey = selectedRemarksBoatId?.toString(),
+                        options = boatOptions,
+                        emptyLabel = "Aucun bateau disponible.",
+                        noResultsLabel = "Aucun bateau trouvé.",
+                        onOptionSelected = { key ->
+                            selectedRemarksBoatId = key.toLongOrNull()
+                        },
+                    )
+                    OutlinedButton(
+                        onClick = { selectedRemarksBoatId = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Tous les bateaux")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRemarksExportDialog = false
+                        onExportRemarks(remarksRepairsOnly, selectedRemarksBoatId)
+                    },
+                ) {
+                    Text("Exporter")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemarksExportDialog = false }) {
+                    Text("Annuler")
+                }
+            },
+        )
+    }
+
+    if (showSingleBoatExportDialog) {
+        val boatOptions = uiState.boatManagement.boats
+            .sortedBy { it.name.lowercase() }
+            .map { SearchableSelectableOption(key = it.id.toString(), label = it.name) }
+        AlertDialog(
+            onDismissRequest = { showSingleBoatExportDialog = false },
+            title = { Text("Exporter un bateau") },
+            text = {
+                SearchableSingleSelectList(
+                    searchQuery = singleBoatSearchQuery,
+                    onSearchQueryChanged = { singleBoatSearchQuery = it },
+                    searchLabel = "Sélectionner un bateau",
+                    selectedKey = selectedSingleBoatId?.toString(),
+                    options = boatOptions,
+                    emptyLabel = "Aucun bateau disponible.",
+                    noResultsLabel = "Aucun bateau trouvé.",
+                    onOptionSelected = { key ->
+                        selectedSingleBoatId = key.toLongOrNull()
+                    },
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        selectedSingleBoatId?.let {
+                            showSingleBoatExportDialog = false
+                            onExportSingleBoat(it)
+                        }
+                    },
+                    enabled = selectedSingleBoatId != null,
+                ) {
+                    Text("Exporter")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSingleBoatExportDialog = false }) {
+                    Text("Annuler")
+                }
+            },
+        )
+    }
+
+    if (showExportDateFromPicker) {
+        AppDatePickerDialog(
+            storageDate = uiState.exportDateFrom.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { showExportDateFromPicker = false },
+            onDateSelected = { selectedDate ->
+                onExportDateFromChanged(selectedDate)
+                showExportDateFromPicker = false
+            },
+        )
+    }
+
+    if (showExportDateToPicker) {
+        AppDatePickerDialog(
+            storageDate = uiState.exportDateTo.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { showExportDateToPicker = false },
+            onDateSelected = { selectedDate ->
+                onExportDateToChanged(selectedDate)
+                showExportDateToPicker = false
+            },
+        )
+    }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -659,8 +987,25 @@ private fun SettingsContent(
                             BackupSection(
                                 uiState = uiState,
                                 onExportFullDatabase = onExportFullDatabase,
-                                onExportBackup = onExportBackup,
                                 onRestoreBackup = onRestoreBackup,
+                            )
+                            DataExportSection(
+                                uiState = uiState,
+                                onOpenSessionsExport = { showSessionsExportDialog = true },
+                                onOpenSingleBoatExport = {
+                                    singleBoatSearchQuery = ""
+                                    selectedSingleBoatId = null
+                                    showSingleBoatExportDialog = true
+                                },
+                                onOpenRemarksExport = {
+                                    remarksBoatSearchQuery = ""
+                                    selectedRemarksBoatId = null
+                                    remarksRepairsOnly = false
+                                    showRemarksExportDialog = true
+                                },
+                                onExportAllBoats = onExportAllBoats,
+                                onExportRowers = onExportRowers,
+                                onExportCrews = onExportCrews,
                             )
 
                             SectionHeader(
@@ -671,26 +1016,6 @@ private fun SettingsContent(
                                 onOpenRowers = onOpenRowers,
                                 onOpenBoats = onOpenBoats,
                                 onOpenDestinations = onOpenDestinations,
-                            )
-
-                            SectionHeader(
-                                title = "Export des données",
-                                description = "Exporter les sorties et les fiches bateaux en CSV.",
-                            )
-                            ImportExportSection(
-                                uiState = uiState,
-                                onExportRowerSearchQueryChanged = onExportRowerSearchQueryChanged,
-                                onExportRowerSelected = onExportRowerSelected,
-                                onExportBoatSearchQueryChanged = onExportBoatSearchQueryChanged,
-                                onExportBoatSelected = onExportBoatSelected,
-                                onExportDestinationSearchQueryChanged = onExportDestinationSearchQueryChanged,
-                                onExportDestinationSelected = onExportDestinationSelected,
-                                onExportDateFromChanged = onExportDateFromChanged,
-                                onExportDateToChanged = onExportDateToChanged,
-                                onClearExportFilters = onClearExportFilters,
-                                onExportAllSessions = onExportAllSessions,
-                                onExportFilteredSessions = onExportFilteredSessions,
-                                onExportBoatSheets = onExportBoatSheets,
                             )
 
                             SectionHeader(
@@ -719,6 +1044,8 @@ private fun SettingsContent(
                                     onThemeModeChanged = onThemeModeChanged,
                                     onInactivityTimeoutMinutesChanged = onInactivityTimeoutMinutesChanged,
                                     onAnimationsEnabledChanged = onAnimationsEnabledChanged,
+                                    onCrewsEnabledChanged = onCrewsEnabledChanged,
+                                    onOpenCrews = onOpenCrews,
                                     onSaveAppSettings = onSaveAppSettings,
                                 )
                                 NotificationSettingsSection(
@@ -736,8 +1063,15 @@ private fun SettingsContent(
                                 )
                                 SystemToolsSection(
                                     uiState = uiState,
-                                    onExportDebugReport = onExportDebugReport,
                                     onResetAllAppData = { showResetDialog = true },
+                                )
+                                DataCleanupSection(
+                                    uiState = uiState,
+                                    onCleanupSessionsEnabledChanged = onCleanupSessionsEnabledChanged,
+                                    onCleanupRemarksEnabledChanged = onCleanupRemarksEnabledChanged,
+                                    onCleanupPeriodChanged = onCleanupPeriodChanged,
+                                    onCleanupCustomCutoffDateChanged = onCleanupCustomCutoffDateChanged,
+                                    onPreviewDataCleanup = onPreviewDataCleanup,
                                 )
                                 AdvancedAccessSection(
                                     uiState = uiState,
@@ -757,8 +1091,25 @@ private fun SettingsContent(
                     BackupSection(
                         uiState = uiState,
                         onExportFullDatabase = onExportFullDatabase,
-                        onExportBackup = onExportBackup,
                         onRestoreBackup = onRestoreBackup,
+                    )
+                    DataExportSection(
+                        uiState = uiState,
+                        onOpenSessionsExport = { showSessionsExportDialog = true },
+                        onOpenSingleBoatExport = {
+                            singleBoatSearchQuery = ""
+                            selectedSingleBoatId = null
+                            showSingleBoatExportDialog = true
+                        },
+                        onOpenRemarksExport = {
+                            remarksBoatSearchQuery = ""
+                            selectedRemarksBoatId = null
+                            remarksRepairsOnly = false
+                            showRemarksExportDialog = true
+                        },
+                        onExportAllBoats = onExportAllBoats,
+                        onExportRowers = onExportRowers,
+                        onExportCrews = onExportCrews,
                     )
 
                     SectionHeader(
@@ -769,26 +1120,6 @@ private fun SettingsContent(
                         onOpenRowers = onOpenRowers,
                         onOpenBoats = onOpenBoats,
                         onOpenDestinations = onOpenDestinations,
-                    )
-
-                    SectionHeader(
-                        title = "Export des données",
-                        description = "Exporter les sorties et les fiches bateaux en CSV.",
-                    )
-                    ImportExportSection(
-                        uiState = uiState,
-                        onExportRowerSearchQueryChanged = onExportRowerSearchQueryChanged,
-                        onExportRowerSelected = onExportRowerSelected,
-                        onExportBoatSearchQueryChanged = onExportBoatSearchQueryChanged,
-                        onExportBoatSelected = onExportBoatSelected,
-                        onExportDestinationSearchQueryChanged = onExportDestinationSearchQueryChanged,
-                        onExportDestinationSelected = onExportDestinationSelected,
-                        onExportDateFromChanged = onExportDateFromChanged,
-                        onExportDateToChanged = onExportDateToChanged,
-                        onClearExportFilters = onClearExportFilters,
-                        onExportAllSessions = onExportAllSessions,
-                        onExportFilteredSessions = onExportFilteredSessions,
-                        onExportBoatSheets = onExportBoatSheets,
                     )
 
                     SectionHeader(
@@ -812,6 +1143,8 @@ private fun SettingsContent(
                             onThemeModeChanged = onThemeModeChanged,
                             onInactivityTimeoutMinutesChanged = onInactivityTimeoutMinutesChanged,
                             onAnimationsEnabledChanged = onAnimationsEnabledChanged,
+                            onCrewsEnabledChanged = onCrewsEnabledChanged,
+                            onOpenCrews = onOpenCrews,
                             onSaveAppSettings = onSaveAppSettings,
                         )
                         NotificationSettingsSection(
@@ -829,8 +1162,15 @@ private fun SettingsContent(
                         )
                         SystemToolsSection(
                             uiState = uiState,
-                            onExportDebugReport = onExportDebugReport,
                             onResetAllAppData = { showResetDialog = true },
+                        )
+                        DataCleanupSection(
+                            uiState = uiState,
+                            onCleanupSessionsEnabledChanged = onCleanupSessionsEnabledChanged,
+                            onCleanupRemarksEnabledChanged = onCleanupRemarksEnabledChanged,
+                            onCleanupPeriodChanged = onCleanupPeriodChanged,
+                            onCleanupCustomCutoffDateChanged = onCleanupCustomCutoffDateChanged,
+                            onPreviewDataCleanup = onPreviewDataCleanup,
                         )
                         AdvancedAccessSection(
                             uiState = uiState,
@@ -1162,6 +1502,8 @@ private fun AppBehaviorSection(
     onThemeModeChanged: (ThemeMode) -> Unit,
     onInactivityTimeoutMinutesChanged: (String) -> Unit,
     onAnimationsEnabledChanged: (Boolean) -> Unit,
+    onCrewsEnabledChanged: (Boolean) -> Unit,
+    onOpenCrews: () -> Unit,
     onSaveAppSettings: () -> Unit,
 ) {
     val trackedOnInactivityTimeoutMinutesChanged = rememberInteractionAwareValueChange(onInactivityTimeoutMinutesChanged)
@@ -1197,6 +1539,35 @@ private fun AppBehaviorSection(
                 checked = uiState.animationsEnabled,
                 onCheckedChange = onAnimationsEnabledChanged,
             )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Activer les équipages",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = "Afficher la gestion des équipages et leur sélection dans les sorties.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = uiState.crewsEnabled,
+                onCheckedChange = onCrewsEnabledChanged,
+            )
+        }
+        if (uiState.crewsEnabled) {
+            OutlinedButton(
+                onClick = onOpenCrews,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Ouvrir l'écran des équipages")
+            }
         }
         Text(
             text = "Mode d'apparence",
@@ -1276,26 +1647,127 @@ private fun NotificationSettingsSection(
 @Composable
 private fun SystemToolsSection(
     uiState: SettingsUiState,
-    onExportDebugReport: () -> Unit,
     onResetAllAppData: () -> Unit,
 ) {
     SettingsSection(
         title = "Outils système",
         description = "Utiliser les outils de maintenance pour le diagnostic et la récupération.",
     ) {
-        OutlinedButton(
-            onClick = onExportDebugReport,
-            enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Exporter le rapport de diagnostic")
-        }
         Button(
             onClick = onResetAllAppData,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (uiState.isWorking) "Traitement..." else "Réinitialiser toutes les données de l'application")
+        }
+    }
+}
+
+@Composable
+private fun DataCleanupSection(
+    uiState: SettingsUiState,
+    onCleanupSessionsEnabledChanged: (Boolean) -> Unit,
+    onCleanupRemarksEnabledChanged: (Boolean) -> Unit,
+    onCleanupPeriodChanged: (DataCleanupPeriod) -> Unit,
+    onCleanupCustomCutoffDateChanged: (String) -> Unit,
+    onPreviewDataCleanup: () -> Unit,
+) {
+    var showCustomDatePicker by remember { mutableStateOf(false) }
+
+    if (showCustomDatePicker) {
+        AppDatePickerDialog(
+            storageDate = uiState.cleanupCustomCutoffDate.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { showCustomDatePicker = false },
+            onDateSelected = onCleanupCustomCutoffDateChanged,
+        )
+    }
+
+    SettingsSection(
+        title = "Nettoyage des données",
+        description = "Supprimer des sorties historiques et des remarques anciennes sans toucher aux sorties en cours ni aux réparations actives.",
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CleanupToggleButton(
+                label = "Historique",
+                selected = uiState.cleanupSessionsEnabled,
+                onClick = { onCleanupSessionsEnabledChanged(!uiState.cleanupSessionsEnabled) },
+                modifier = Modifier.weight(1f),
+            )
+            CleanupToggleButton(
+                label = "Remarques",
+                selected = uiState.cleanupRemarksEnabled,
+                onClick = { onCleanupRemarksEnabledChanged(!uiState.cleanupRemarksEnabled) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Text(
+            text = "Période",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Medium,
+        )
+
+        DataCleanupPeriod.values().forEach { period ->
+            val selected = uiState.cleanupPeriod == period
+            if (selected) {
+                Button(
+                    onClick = { onCleanupPeriodChanged(period) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(period.label)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onCleanupPeriodChanged(period) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(period.label)
+                }
+            }
+        }
+
+        if (uiState.cleanupPeriod == DataCleanupPeriod.CUSTOM) {
+            AppSelectorFieldButton(
+                onClick = { showCustomDatePicker = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (uiState.cleanupCustomCutoffDate.isBlank()) {
+                        "Choisir une date limite"
+                    } else {
+                        "Avant le ${formatDateForDisplay(uiState.cleanupCustomCutoffDate)}"
+                    },
+                )
+            }
+        }
+
+        Button(
+            onClick = onPreviewDataCleanup,
+            enabled = !uiState.isWorking && uiState.hasCleanupSelection,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (uiState.isWorking) "Traitement..." else "Prévisualiser le nettoyage")
+        }
+    }
+}
+
+@Composable
+private fun CleanupToggleButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (selected) {
+        Button(onClick = onClick, modifier = modifier) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = onClick, modifier = modifier) {
+            Text(label)
         }
     }
 }
@@ -1448,186 +1920,63 @@ private fun AdvancedAccessSection(
 }
 
 @Composable
-private fun ImportExportSection(
+private fun DataExportSection(
     uiState: SettingsUiState,
-    onExportRowerSearchQueryChanged: (String) -> Unit,
-    onExportRowerSelected: (String, Boolean) -> Unit,
-    onExportBoatSearchQueryChanged: (String) -> Unit,
-    onExportBoatSelected: (Long, Boolean) -> Unit,
-    onExportDestinationSearchQueryChanged: (String) -> Unit,
-    onExportDestinationSelected: (String, Boolean) -> Unit,
-    onExportDateFromChanged: (String) -> Unit,
-    onExportDateToChanged: (String) -> Unit,
-    onClearExportFilters: () -> Unit,
-    onExportAllSessions: () -> Unit,
-    onExportFilteredSessions: () -> Unit,
-    onExportBoatSheets: () -> Unit,
+    onOpenSessionsExport: () -> Unit,
+    onOpenSingleBoatExport: () -> Unit,
+    onOpenRemarksExport: () -> Unit,
+    onExportAllBoats: () -> Unit,
+    onExportRowers: () -> Unit,
+    onExportCrews: () -> Unit,
 ) {
-    var showFilters by remember { mutableStateOf(false) }
-    var showFromDatePicker by remember { mutableStateOf(false) }
-    var showToDatePicker by remember { mutableStateOf(false) }
-
-    if (showFromDatePicker) {
-        AppDatePickerDialog(
-            storageDate = uiState.exportDateFrom,
-            onDismissRequest = { showFromDatePicker = false },
-            onDateSelected = onExportDateFromChanged,
-        )
-    }
-
-    if (showToDatePicker) {
-        AppDatePickerDialog(
-            storageDate = uiState.exportDateTo,
-            onDismissRequest = { showToDatePicker = false },
-            onDateSelected = onExportDateToChanged,
-        )
-    }
-
     SettingsSection(
-        title = "Export des données",
-        description = "Exporter toutes les sessions, ou seulement celles qui correspondent aux filtres sélectionnés.",
+        title = "Export de données",
+        description = "Exporter des données ciblées sans remplacer la sauvegarde complète de l'application.",
     ) {
+        Button(
+            onClick = onOpenSessionsExport,
+            enabled = !uiState.isWorking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Exporter les sorties")
+        }
+        Button(
+            onClick = onExportAllBoats,
+            enabled = !uiState.isWorking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Exporter tous les bateaux")
+        }
         OutlinedButton(
-            onClick = { showFilters = !showFilters },
+            onClick = onOpenSingleBoatExport,
+            enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(if (showFilters) "Masquer les filtres" else "Afficher les filtres")
+            Text("Exporter un bateau")
         }
-
-        if (showFilters) {
-            Text(
-                text = "Filtres pour l'export filtré",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-            )
-
-            Row(
+        Button(
+            onClick = onOpenRemarksExport,
+            enabled = !uiState.isWorking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Exporter les remarques")
+        }
+        Button(
+            onClick = onExportRowers,
+            enabled = !uiState.isWorking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Exporter les rameurs")
+        }
+        if (uiState.crewsEnabled) {
+            Button(
+                onClick = onExportCrews,
+                enabled = !uiState.isWorking,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AppSelectorFieldButton(
-                    onClick = { showFromDatePicker = true },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(
-                        if (uiState.exportDateFrom.isBlank()) {
-                            "Date de début"
-                        } else {
-                            "Début : ${formatDateForDisplay(uiState.exportDateFrom)}"
-                        },
-                    )
-                }
-                AppSelectorFieldButton(
-                    onClick = { showToDatePicker = true },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(
-                        if (uiState.exportDateTo.isBlank()) {
-                            "Date de fin"
-                        } else {
-                            "Fin : ${formatDateForDisplay(uiState.exportDateTo)}"
-                        },
-                    )
-                }
-            }
-
-            SearchableSelectableList(
-                searchQuery = uiState.exportBoatSearchQuery,
-                onSearchQueryChanged = onExportBoatSearchQueryChanged,
-                searchLabel = "Rechercher un bateau",
-                selectedKeys = uiState.selectedExportBoatIds.map(Long::toString).toSet(),
-                options = uiState.filteredExportBoatOptions,
-                emptyLabel = "Aucun bateau disponible pour l'export.",
-                noResultsLabel = "Aucun bateau ne correspond à la recherche actuelle.",
-                onOptionToggled = { selectedKey ->
-                    val boatId = selectedKey.toLongOrNull() ?: return@SearchableSelectableList
-                    onExportBoatSelected(boatId, boatId !in uiState.selectedExportBoatIds)
-                },
-            )
-            if (uiState.selectedExportBoatIds.isNotEmpty()) {
-                Text(
-                    text = "Bateaux sélectionnés : ${uiState.selectedExportBoatIds.size}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            SearchableSelectableList(
-                searchQuery = uiState.exportRowerSearchQuery,
-                onSearchQueryChanged = onExportRowerSearchQueryChanged,
-                searchLabel = "Rechercher un rameur",
-                selectedKeys = uiState.selectedExportRowers,
-                options = uiState.filteredExportRowerOptions,
-                emptyLabel = "Aucun rameur disponible pour l'export.",
-                noResultsLabel = "Aucun rameur ne correspond à la recherche actuelle.",
-                onOptionToggled = { selectedKey ->
-                    onExportRowerSelected(selectedKey, selectedKey !in uiState.selectedExportRowers)
-                },
-            )
-            if (uiState.selectedExportRowers.isNotEmpty()) {
-                Text(
-                    text = "Rameurs sélectionnés : ${uiState.selectedExportRowers.size}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            SearchableSelectableList(
-                searchQuery = uiState.exportDestinationSearchQuery,
-                onSearchQueryChanged = onExportDestinationSearchQueryChanged,
-                searchLabel = "Rechercher une destination",
-                selectedKeys = uiState.selectedExportDestinations,
-                options = uiState.filteredExportDestinationOptions,
-                emptyLabel = "Aucune destination disponible pour l'export.",
-                noResultsLabel = "Aucune destination ne correspond à la recherche actuelle.",
-                onOptionToggled = { selectedKey ->
-                    onExportDestinationSelected(selectedKey, selectedKey !in uiState.selectedExportDestinations)
-                },
-            )
-            if (uiState.selectedExportDestinations.isNotEmpty()) {
-                Text(
-                    text = "Destinations sélectionnées : ${uiState.selectedExportDestinations.size}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (uiState.hasActiveExportFilters) {
-                OutlinedButton(
-                    onClick = onClearExportFilters,
-                    enabled = !uiState.isWorking,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Effacer les filtres d'export")
-                }
+                Text("Exporter les équipages")
             }
         }
-
-        Button(
-            onClick = onExportAllSessions,
-            enabled = !uiState.isWorking && uiState.exportableSessions.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Exporter toutes les sessions (CSV)")
-        }
-
-        Button(
-            onClick = onExportFilteredSessions,
-            enabled = !uiState.isWorking && uiState.filteredExportableSessions.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Exporter les sessions filtrées (CSV)")
-        }
-
-        Button(
-            onClick = onExportBoatSheets,
-            enabled = !uiState.isWorking && uiState.boatManagement.boats.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Exporter fiches bateaux")
-        }
-
-        Text(
-            text = "Toutes les sessions : ${uiState.exportableSessions.size} | Sessions filtrées : ${uiState.filteredExportableSessions.size}",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -1635,26 +1984,18 @@ private fun ImportExportSection(
 private fun BackupSection(
     uiState: SettingsUiState,
     onExportFullDatabase: () -> Unit,
-    onExportBackup: () -> Unit,
     onRestoreBackup: () -> Unit,
 ) {
     SettingsSection(
-        title = "Sauvegarde / Restauration",
-        description = "Exporter la base complète, créer une sauvegarde ZIP ou restaurer une sauvegarde précédente.",
+        title = "Sauvegarde & restauration",
+        description = "Exporter la base complète ou restaurer une sauvegarde précédente.",
     ) {
         Button(
             onClick = onExportFullDatabase,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Exporter toute la base de données")
-        }
-        Button(
-            onClick = onExportBackup,
-            enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Exporter la sauvegarde de la base (.zip)")
+            Text(if (uiState.isWorking) "Traitement..." else "Exporter la base de données complète")
         }
         Button(
             onClick = onRestoreBackup,
@@ -1896,34 +2237,43 @@ private fun EditableListRow(
     }
 }
 
-private fun defaultBackupFileName(): String {
-    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    return "cahier_sortie_backup_$timestamp.zip"
-}
-
-private fun defaultSessionExportFileName(): String {
-    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    return "sessions_export_$timestamp.csv"
-}
-
-private fun defaultFilteredSessionExportFileName(): String {
-    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    return "sessions_filtered_export_$timestamp.csv"
-}
-
 private fun defaultFullDatabaseExportFileName(): String {
     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
     return "base_complete_export_$timestamp.zip"
 }
 
-private fun defaultBoatSheetsExportFileName(): String {
+private fun defaultSessionsExportFileName(): String {
     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    return "fiches_bateaux_export_$timestamp.csv"
+    return "sorties_export_$timestamp.csv"
 }
 
-private fun defaultDebugReportFileName(): String {
+private fun defaultBoatSheetsExportFileName(): String {
     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    return "debug_report_$timestamp.txt"
+    return "bateaux_export_$timestamp.zip"
+}
+
+private fun defaultSingleBoatExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "fiche_bateau_$timestamp.zip"
+}
+
+private fun defaultRemarksExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "remarques_export_$timestamp.csv"
+}
+
+private fun defaultRowersExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "rameurs_export_$timestamp.csv"
+}
+
+private fun defaultCrewsExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "equipages_export_$timestamp.csv"
+}
+
+private fun defaultCleanupCutoffDate(): String {
+    return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 }
 
 private fun ThemeMode.displayLabel(): String {

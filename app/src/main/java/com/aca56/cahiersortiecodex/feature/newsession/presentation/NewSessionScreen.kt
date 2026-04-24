@@ -2,6 +2,7 @@ package com.aca56.cahiersortiecodex.feature.newsession.presentation
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments
+import androidx.activity.result.contract.ActivityResultContracts.TakePicturePreview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,11 +50,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
+import com.aca56.cahiersortiecodex.ui.components.AppTextField
+import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppTimePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
+import com.aca56.cahiersortiecodex.ui.components.PhotoSourceChooserDialog
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
@@ -75,13 +79,39 @@ fun NewSessionRoute(
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
             boatPhotoStorage = appContainer.boatPhotoStorage,
+            appPreferencesStore = appContainer.appPreferencesStore,
+            crewStore = appContainer.crewStore,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
+    var showRemarkPhotoChooser by remember { mutableStateOf(false) }
     val remarkPhotoPickerLauncher = rememberLauncherForActivityResult(
         contract = OpenMultipleDocuments(),
     ) { uris ->
         viewModel.addSessionRemarkPhotos(uris)
+    }
+    val remarkCameraLauncher = rememberLauncherForActivityResult(
+        contract = TakePicturePreview(),
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.addSessionRemarkPhoto(bitmap)
+        } else {
+            viewModel.clearFeedback()
+        }
+    }
+
+    if (showRemarkPhotoChooser) {
+        PhotoSourceChooserDialog(
+            onDismiss = { showRemarkPhotoChooser = false },
+            onTakePhoto = {
+                showRemarkPhotoChooser = false
+                remarkCameraLauncher.launch(null)
+            },
+            onPickFromGallery = {
+                showRemarkPhotoChooser = false
+                remarkPhotoPickerLauncher.launch(arrayOf("image/*"))
+            },
+        )
     }
 
     NewSessionScreen(
@@ -107,8 +137,8 @@ fun NewSessionRoute(
         onRemoveGuestRower = viewModel::removeGuestRower,
         onToggleQuickMode = viewModel::toggleQuickMode,
         onResetForm = viewModel::resetForm,
-        onApplySuggestedCrew = viewModel::applySuggestedCrew,
-        onAddSessionRemarkPhotos = { remarkPhotoPickerLauncher.launch(arrayOf("image/*")) },
+        onApplyCrew = viewModel::applyCrew,
+        onAddSessionRemarkPhotos = { showRemarkPhotoChooser = true },
         onRemoveSessionRemarkPhoto = viewModel::removeSessionRemarkPhoto,
         onSaveSession = viewModel::saveSession,
         onOpenBoatDetails = onOpenBoatDetails,
@@ -140,14 +170,40 @@ fun EditSessionRoute(
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
             boatPhotoStorage = appContainer.boatPhotoStorage,
+            appPreferencesStore = appContainer.appPreferencesStore,
+            crewStore = appContainer.crewStore,
             sessionId = sessionId,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
+    var showRemarkPhotoChooser by remember { mutableStateOf(false) }
     val remarkPhotoPickerLauncher = rememberLauncherForActivityResult(
         contract = OpenMultipleDocuments(),
     ) { uris ->
         viewModel.addSessionRemarkPhotos(uris)
+    }
+    val remarkCameraLauncher = rememberLauncherForActivityResult(
+        contract = TakePicturePreview(),
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.addSessionRemarkPhoto(bitmap)
+        } else {
+            viewModel.clearFeedback()
+        }
+    }
+
+    if (showRemarkPhotoChooser) {
+        PhotoSourceChooserDialog(
+            onDismiss = { showRemarkPhotoChooser = false },
+            onTakePhoto = {
+                showRemarkPhotoChooser = false
+                remarkCameraLauncher.launch(null)
+            },
+            onPickFromGallery = {
+                showRemarkPhotoChooser = false
+                remarkPhotoPickerLauncher.launch(arrayOf("image/*"))
+            },
+        )
     }
 
     NewSessionScreen(
@@ -173,8 +229,8 @@ fun EditSessionRoute(
         onRemoveGuestRower = viewModel::removeGuestRower,
         onToggleQuickMode = viewModel::toggleQuickMode,
         onResetForm = viewModel::resetForm,
-        onApplySuggestedCrew = viewModel::applySuggestedCrew,
-        onAddSessionRemarkPhotos = { remarkPhotoPickerLauncher.launch(arrayOf("image/*")) },
+        onApplyCrew = viewModel::applyCrew,
+        onAddSessionRemarkPhotos = { showRemarkPhotoChooser = true },
         onRemoveSessionRemarkPhoto = viewModel::removeSessionRemarkPhoto,
         onSaveSession = viewModel::saveSession,
         onOpenBoatDetails = onOpenBoatDetails,
@@ -212,7 +268,7 @@ fun NewSessionScreen(
     onRemoveGuestRower: (Long) -> Unit,
     onToggleQuickMode: () -> Unit,
     onResetForm: () -> Unit,
-    onApplySuggestedCrew: (Set<Long>) -> Unit,
+    onApplyCrew: (Long) -> Unit,
     onAddSessionRemarkPhotos: () -> Unit,
     onRemoveSessionRemarkPhoto: (String) -> Unit,
     onSaveSession: () -> Unit,
@@ -224,6 +280,8 @@ fun NewSessionScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var boatSearchQuery by remember { mutableStateOf("") }
+    var crewSearchQuery by remember { mutableStateOf("") }
+    var showAllCrews by remember { mutableStateOf(false) }
     var showRemarkStatusOptions by remember(uiState.sessionRemarkStatus) { mutableStateOf(uiState.sessionRemarkStatus != RemarkStatus.NORMAL) }
     val trackedOnKmChanged = rememberInteractionAwareValueChange(onKmChanged)
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
@@ -405,7 +463,7 @@ fun NewSessionScreen(
             }
 
             SectionCard(
-                    title = "Équipage",
+                title = "Équipage",
                 description = "Choisissez le bateau et les rameurs.",
             ) {
                 FormGroupTitle("Bateau")
@@ -430,20 +488,77 @@ fun NewSessionScreen(
                     },
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(6.dp))
-
-                if (uiState.suggestedCrew.isNotEmpty()) {
-                    CompactSuggestionsSection(
-                        suggestions = uiState.suggestedCrew,
-                        onApplySuggestion = onApplySuggestedCrew,
-                    )
-
+                if (uiState.crewsEnabled) {
                     Spacer(modifier = Modifier.height(6.dp))
                     HorizontalDivider()
                     Spacer(modifier = Modifier.height(6.dp))
+
+                    FormGroupTitle("Équipages")
+                    AppTextField(
+                        value = crewSearchQuery,
+                        onValueChange = { crewSearchQuery = it },
+                        label = "Rechercher un équipage",
+                        modifier = Modifier.fillMaxWidth(),
+                        type = AppTextFieldType.SEARCH,
+                    )
+
+                    val maxCrewSize = uiState.selectedBoat?.seatCount
+                    val filteredCrews = uiState.availableCrews.filter { crew ->
+                        val matchesSearch = crewSearchQuery.isBlank() ||
+                            crew.name.contains(crewSearchQuery.trim(), ignoreCase = true)
+                        val fitsBoatCapacity = maxCrewSize == null || crew.rowerIds.size <= maxCrewSize
+                        matchesSearch && fitsBoatCapacity
+                    }
+                    val visibleCrews = if (showAllCrews) filteredCrews else filteredCrews.take(3)
+
+                    if (visibleCrews.isEmpty()) {
+                        Text(
+                            text = "Aucun équipage disponible.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        visibleCrews.forEach { crew ->
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onApplyCrew(crew.id) },
+                                shape = RoundedCornerShape(16.dp),
+                                tonalElevation = 1.dp,
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = crew.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = crew.rowerNames.joinToString().ifBlank { "Aucun rameur" },
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
+                        }
+                        if (filteredCrews.size > 3) {
+                            OutlinedButton(
+                                onClick = { showAllCrews = !showAllCrews },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(if (showAllCrews) "Afficher moins" else "Afficher plus")
+                            }
+                        }
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(6.dp))
 
                 FormGroupTitle("Rameurs")
                 Text(
@@ -780,60 +895,6 @@ private fun QuickModeInfoCard() {
             text = "Le démarrage de la sortie crée directement une sortie en cours.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun CompactSuggestionsSection(
-    suggestions: List<SuggestedCrewPatternUi>,
-    onApplySuggestion: (Set<Long>) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        FormGroupTitle("Suggestions d'équipage")
-        Text(
-            text = "Touchez une proposition pour remplir rapidement l'équipage.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        suggestions.take(5).forEach { suggestion ->
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onApplySuggestion(suggestion.rowerIds) },
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = suggestion.rowerNames.joinToString(", "),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "${suggestion.occurrenceCount} sorties similaires",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Text(
-                        text = "Ajouter",
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-        }
     }
 }
 

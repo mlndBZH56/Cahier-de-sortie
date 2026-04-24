@@ -1,5 +1,6 @@
 package com.aca56.cahiersortiecodex.ui.shell
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,12 +29,15 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.navigation.AppDestination
 import com.aca56.cahiersortiecodex.navigation.allDestinations
 import com.aca56.cahiersortiecodex.navigation.topLevelDestinations
@@ -172,7 +176,17 @@ private fun AppNavigationDrawer(
     navController: NavHostController,
     onItemClick: (() -> Unit)? = null,
 ) {
+    val context = LocalContext.current
+    val appContainer = (context.applicationContext as CahierSortieApplication).appContainer
+    val preferences by appContainer.appPreferencesStore.preferencesFlow.collectAsState(
+        initial = appContainer.appPreferencesStore.currentPreferences(),
+    )
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
+    val visibleDestinations = if (preferences.crewsEnabled) {
+        topLevelDestinations
+    } else {
+        topLevelDestinations.filterNot { it == AppDestination.Crews }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -190,7 +204,7 @@ private fun AppNavigationDrawer(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             )
 
-            topLevelDestinations.forEach { destination ->
+            visibleDestinations.forEach { destination ->
                 val isSelected = currentDestination?.hierarchy?.any { destinationInHierarchy ->
                     destinationInHierarchy.route == destination.route ||
                         (

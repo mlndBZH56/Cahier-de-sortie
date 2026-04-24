@@ -36,6 +36,29 @@ class PinCodeStore(context: Context) {
             ?: DEFAULT_SUPER_ADMIN_PIN
     }
 
+    fun getNormalPin(): String? {
+        return preferences.getString(KEY_PIN, null)
+    }
+
+    fun restorePins(
+        normalPin: String?,
+        superAdminPin: String?,
+    ) {
+        preferences.edit().apply {
+            if (normalPin.isNullOrBlank()) {
+                remove(KEY_PIN)
+            } else {
+                putString(KEY_PIN, normalPin)
+            }
+            if (superAdminPin.isNullOrBlank()) {
+                remove(KEY_SUPER_ADMIN_PIN)
+            } else {
+                putString(KEY_SUPER_ADMIN_PIN, superAdminPin)
+            }
+            apply()
+        }
+    }
+
     fun deletePin() {
         preferences.edit().remove(KEY_PIN).apply()
     }

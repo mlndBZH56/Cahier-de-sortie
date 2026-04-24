@@ -1,9 +1,11 @@
 package com.aca56.cahiersortiecodex.feature.newsession.presentation
 
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aca56.cahiersortiecodex.data.crew.CrewStore
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
@@ -21,6 +23,7 @@ import com.aca56.cahiersortiecodex.data.repository.DestinationRepository
 import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
 import com.aca56.cahiersortiecodex.data.repository.RowerRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
+import com.aca56.cahiersortiecodex.data.settings.AppPreferencesStore
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableOption
 import com.aca56.cahiersortiecodex.ui.components.currentStorageDate
 import com.aca56.cahiersortiecodex.ui.components.currentStorageTime
@@ -39,10 +42,11 @@ data class GuestRowerUi(
     val fullName: String,
 )
 
-data class SuggestedCrewPatternUi(
-    val rowerIds: Set<Long>,
+data class CrewSummaryUi(
+    val id: Long,
+    val name: String,
     val rowerNames: List<String>,
-    val occurrenceCount: Int,
+    val rowerIds: Set<Long>,
 )
 
 data class BoatConflictUi(
@@ -68,13 +72,15 @@ data class NewSessionUiState(
     val isCustomDestination: Boolean = false,
     val availableRowers: List<RowerEntity> = emptyList(),
     val rowerUsageCounts: Map<Long, Int> = emptyMap(),
+    val boatRowerCounts: Map<Long, Int> = emptyMap(),
     val boatUsageCounts: Map<Long, Int> = emptyMap(),
     val boatStatuses: Map<Long, BoatSelectionStatus> = emptyMap(),
     val selectedRowerIds: Set<Long> = emptySet(),
     val rowerSearchQuery: String = "",
     val guestRowerName: String = "",
     val guestRowers: List<GuestRowerUi> = emptyList(),
-    val suggestedCrew: List<SuggestedCrewPatternUi> = emptyList(),
+    val crewsEnabled: Boolean = false,
+    val availableCrews: List<CrewSummaryUi> = emptyList(),
     val boatConflict: BoatConflictUi? = null,
     val startTime: String = defaultSessionTime(),
     val endTime: String = "",
@@ -109,9 +115,36 @@ data class NewSessionUiState(
             isSeatCountValid
 
     val filteredRowers: List<RowerEntity>
-        get() = availableRowers.filter { rower ->
-            val fullName = "${rower.firstName} ${rower.lastName}".trim()
-            rowerSearchQuery.isBlank() || fullName.contains(rowerSearchQuery.trim(), ignoreCase = true)
+        get() {
+            val defaultIndexes = availableRowers.withIndex().associate { it.value.id to it.index }
+            val query = rowerSearchQuery.trim()
+            val selectedRowers = availableRowers
+                .filter { it.id in selectedRowerIds }
+                .sortedBy { defaultIndexes[it.id] ?: Int.MAX_VALUE }
+            val unselectedRowers = availableRowers.filterNot { it.id in selectedRowerIds }
+            val searchMatches = if (query.isBlank()) {
+                emptyList()
+            } else {
+                unselectedRowers.filter { rower ->
+                    val fullName = "${rower.firstName} ${rower.lastName}".trim()
+                    fullName.contains(query, ignoreCase = true)
+                }.sortedBy { defaultIndexes[it.id] ?: Int.MAX_VALUE }
+            }
+            val searchMatchIds = searchMatches.mapTo(mutableSetOf()) { it.id }
+            val remainingRowers = unselectedRowers.filterNot { rower ->
+                rower.id in searchMatchIds
+            }
+            val suggestedRowers = remainingRowers
+                .filter { (boatRowerCounts[it.id] ?: 0) > 0 }
+                .sortedWith(
+                    compareByDescending<RowerEntity> { boatRowerCounts[it.id] ?: 0 }
+                        .thenBy { defaultIndexes[it.id] ?: Int.MAX_VALUE },
+                )
+            val fallbackRowers = remainingRowers
+                .filter { (boatRowerCounts[it.id] ?: 0) == 0 }
+                .sortedBy { defaultIndexes[it.id] ?: Int.MAX_VALUE }
+
+            return selectedRowers + searchMatches + suggestedRowers + fallbackRowers
         }
 
     val filteredRowerOptions: List<SearchableSelectableOption>
@@ -121,7 +154,7 @@ data class NewSessionUiState(
                 label = "${rower.firstName} ${rower.lastName}".trim(),
                 usageCount = rowerUsageCounts[rower.id] ?: 0,
             )
-        }.sortedWith(compareByDescending<SearchableSelectableOption> { it.usageCount }.thenBy { it.label })
+        }
 
     val availableBoatOptions: List<SearchableSelectableOption>
         get() = availableBoats.map { boat ->
@@ -144,9 +177,10 @@ class NewSessionViewModel(
     private val rowerRepository: RowerRepository,
     private val sessionRepository: SessionRepository,
     private val boatPhotoStorage: BoatPhotoStorage,
+    private val appPreferencesStore: AppPreferencesStore,
+    private val crewStore: CrewStore,
     private val sessionId: Long? = null,
 ) : ViewModel() {
-    private val logTag = "NewSessionSuggestions"
     private val uiStateMutable = MutableStateFlow(NewSessionUiState(editingSessionId = sessionId))
     val uiState: StateFlow<NewSessionUiState> = uiStateMutable.asStateFlow()
 
@@ -160,6 +194,8 @@ class NewSessionViewModel(
         observeRowers()
         observeUsageAndSuggestions()
         observeBoatStatuses()
+        observeCrewPreferences()
+        observeCrews()
         if (sessionId != null) {
             loadSession(sessionId)
         }
@@ -193,14 +229,14 @@ class NewSessionViewModel(
                 savedSessionStatus = null,
             )
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
     fun resetForm() {
         uiStateMutable.update { state ->
             state.resetPreservingSources(editingSessionId = state.editingSessionId)
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
     fun onDateChanged(value: String) {
@@ -247,8 +283,8 @@ class NewSessionViewModel(
                         boatId = boatId,
                         boatName = ongoingConflict.boat.name,
                         activeSessionId = ongoingConflict.session.id,
-                        title = "Bateau déjà utilisé",
-                        description = "Ce bateau est déjà utilisé dans une sortie en cours. Vous devez confirmer avant de l’utiliser.",
+                        title = "Bateau en cours d'utilisation",
+                        description = "Ce bateau est en cours d'utilisation dans une sortie en cours. Vous devez confirmer avant de l’utiliser.",
                     ),
                     errorMessage = null,
                     successMessage = null,
@@ -342,6 +378,31 @@ class NewSessionViewModel(
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "Impossible d'ajouter les photos à la remarque.",
+                        successMessage = null,
+                        savedSessionStatus = null,
+                    )
+                }
+            }
+        }
+    }
+
+    fun addSessionRemarkPhoto(bitmap: Bitmap) {
+        viewModelScope.launch {
+            runCatching {
+                boatPhotoStorage.saveCompressedBitmap(bitmap)
+            }.onSuccess { path ->
+                uiStateMutable.update {
+                    it.copy(
+                        sessionRemarkPhotoPaths = (it.sessionRemarkPhotoPaths + path).distinct(),
+                        errorMessage = null,
+                        successMessage = null,
+                        savedSessionStatus = null,
+                    )
+                }
+            }.onFailure {
+                uiStateMutable.update {
+                    it.copy(
+                        errorMessage = "Impossible d'ajouter la photo à la remarque.",
                         successMessage = null,
                         savedSessionStatus = null,
                     )
@@ -445,19 +506,21 @@ class NewSessionViewModel(
                 savedSessionStatus = null,
             ).withSeatValidation()
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
-    fun applySuggestedCrew(rowerIds: Set<Long>) {
+    fun applyCrew(crewId: Long) {
+        val crew = uiState.value.availableCrews.firstOrNull { it.id == crewId } ?: return
         uiStateMutable.update { state ->
             state.copy(
-                selectedRowerIds = rowerIds,
+                selectedRowerIds = crew.rowerIds.intersect(state.availableRowers.map { it.id }.toSet()),
+                guestRowers = emptyList(),
                 errorMessage = null,
                 successMessage = null,
                 savedSessionStatus = null,
             ).withSeatValidation()
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
     fun addGuestRower() {
@@ -490,7 +553,7 @@ class NewSessionViewModel(
                 savedSessionStatus = null,
             ).withSeatValidation()
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
     fun removeGuestRower(localId: Long) {
@@ -501,7 +564,7 @@ class NewSessionViewModel(
                 successMessage = null,
             ).withSeatValidation()
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
     fun saveSession() {
@@ -733,7 +796,7 @@ class NewSessionViewModel(
                         )
                     }
                 }
-                refreshSuggestions()
+                refreshCrewOrdering()
             }.onFailure {
                 uiStateMutable.update {
                     it.copy(
@@ -794,7 +857,7 @@ class NewSessionViewModel(
                         savedSessionStatus = null,
                     ).withSeatValidation()
                 }
-                refreshSuggestions()
+                refreshCrewOrdering()
             }.onFailure {
                 uiStateMutable.update {
                     it.copy(
@@ -819,7 +882,7 @@ class NewSessionViewModel(
                         selectedBoatId = selectedBoatId,
                     ).withSeatValidation()
                 }
-                refreshSuggestions()
+                refreshCrewOrdering()
             }
         }
     }
@@ -854,12 +917,20 @@ class NewSessionViewModel(
                     val validSelectedIds = state.selectedRowerIds.filterTo(mutableSetOf()) { selectedId ->
                         rowers.any { rower -> rower.id == selectedId }
                     }
+                    val rowerNamesById = rowers.associate { rower ->
+                        rower.id to "${rower.firstName} ${rower.lastName}".trim()
+                    }
                     state.copy(
                         availableRowers = rowers,
                         selectedRowerIds = validSelectedIds,
+                        availableCrews = state.availableCrews.map { crew ->
+                            crew.copy(
+                                rowerNames = crew.rowerIds.mapNotNull(rowerNamesById::get),
+                            )
+                        },
                     ).withSeatValidation()
                 }
-                refreshSuggestions()
+                refreshCrewOrdering()
             }
         }
     }
@@ -891,7 +962,39 @@ class NewSessionViewModel(
                         boatUsageCounts = boatUsageCounts,
                     )
                 }
-                refreshSuggestions()
+                refreshCrewOrdering()
+            }
+        }
+    }
+
+    private fun observeCrewPreferences() {
+        viewModelScope.launch {
+            appPreferencesStore.preferencesFlow.collect { preferences ->
+                uiStateMutable.update {
+                    it.copy(crewsEnabled = preferences.crewsEnabled)
+                }
+            }
+        }
+    }
+
+    private fun observeCrews() {
+        viewModelScope.launch {
+            crewStore.crewsFlow.collect { crews ->
+                val rowerNamesById = uiState.value.availableRowers.associate { rower ->
+                    rower.id to "${rower.firstName} ${rower.lastName}".trim()
+                }
+                uiStateMutable.update {
+                    it.copy(
+                        availableCrews = crews.map { crew ->
+                            CrewSummaryUi(
+                                id = crew.id,
+                                name = crew.name,
+                                rowerNames = crew.rowerIds.mapNotNull(rowerNamesById::get),
+                                rowerIds = crew.rowerIds.toSet(),
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -927,69 +1030,56 @@ class NewSessionViewModel(
             )
             updated.withSeatValidation()
         }
-        refreshSuggestions()
+        refreshCrewOrdering()
     }
 
-    private fun refreshSuggestions() {
-        val history = allSessions.filter { it.session.status != SessionStatus.ONGOING }
+    private fun refreshCrewOrdering() {
         uiStateMutable.update { state ->
             state.copy(
-                suggestedCrew = buildSuggestedCrew(state, history),
+                boatRowerCounts = buildBoatRowerCounts(state, allSessions),
             )
         }
     }
 
-    private fun buildSuggestedCrew(
+    private fun buildBoatRowerCounts(
         state: NewSessionUiState,
         sessions: List<SessionWithDetails>,
-    ): List<SuggestedCrewPatternUi> {
-        val selectedBoatId = state.selectedBoatId ?: return emptyList()
-        if (state.availableRowers.isEmpty()) return emptyList()
+    ): Map<Long, Int> {
+        val selectedBoatId = state.selectedBoatId ?: return emptyMap()
+        if (state.availableRowers.isEmpty()) return emptyMap()
 
-        val rowerNamesById = state.availableRowers.associate { rower ->
-            rower.id to "${rower.firstName} ${rower.lastName}".trim()
+        val matchingSessions = sessions.filter { session ->
+            session.boat.id == selectedBoatId &&
+                session.session.status == SessionStatus.COMPLETED &&
+                session.sessionRowers.any { it.sessionRower.rowerId != null }
         }
-
-        val matchingSessions = sessions.filter { it.boat.id == selectedBoatId }
-        val extractedCrews = matchingSessions.map { session ->
+        val counts = linkedMapOf<Long, Int>()
+        matchingSessions.forEach { session ->
             session.sessionRowers
                 .mapNotNull { it.sessionRower.rowerId }
-                .distinct()
-                .sorted()
+                .forEach { rowerId ->
+                    counts[rowerId] = (counts[rowerId] ?: 0) + 1
+                }
         }
 
-        Log.d(
-            logTag,
-            "Boat=$selectedBoatId matchingSessions=${matchingSessions.map { it.session.id }} extractedCrews=$extractedCrews",
-        )
-
-        val suggestions = extractedCrews
-            .asSequence()
-            .filter { it.size >= 2 }
-            .groupingBy { it }
-            .eachCount()
-            .filterValues { it >= 2 }
-            .entries
-            .sortedWith(
-                compareByDescending<Map.Entry<List<Long>, Int>> { it.value }
-                    .thenByDescending { it.key.size },
-            )
+        val selectedBoatName = state.availableBoats.firstOrNull { it.id == selectedBoatId }?.name ?: "bateau inconnu"
+        val topFiveRowers = counts.entries
+            .sortedByDescending { it.value }
             .take(5)
-            .map { (rowerIds, count) ->
-                SuggestedCrewPatternUi(
-                    rowerIds = rowerIds.toSet(),
-                    rowerNames = rowerIds.mapNotNull(rowerNamesById::get),
-                    occurrenceCount = count,
-                )
+            .joinToString { entry ->
+                val rowerName = state.availableRowers.firstOrNull { it.id == entry.key }?.let { rower ->
+                    "${rower.firstName} ${rower.lastName}".trim()
+                } ?: "rameur ${entry.key}"
+                "$rowerName=${entry.value}"
             }
-            .filter { it.rowerNames.size >= 2 }
+            .ifBlank { "aucun rameur" }
 
         Log.d(
-            logTag,
-            "Boat=$selectedBoatId suggestions=${suggestions.map { it.rowerNames to it.occurrenceCount }}",
+            CrewOrderingLogTag,
+            "selectedBoat=$selectedBoatName($selectedBoatId), sessionsFound=${matchingSessions.size}, top5=$topFiveRowers",
         )
 
-        return suggestions
+        return counts
     }
 
     private fun NewSessionUiState.withSeatValidation(): NewSessionUiState {
@@ -1013,12 +1103,17 @@ class NewSessionViewModel(
             availableDestinations = availableDestinations,
             availableRowers = availableRowers,
             rowerUsageCounts = rowerUsageCounts,
+            boatRowerCounts = emptyMap(),
             boatUsageCounts = boatUsageCounts,
             boatStatuses = boatStatuses,
+            crewsEnabled = crewsEnabled,
+            availableCrews = availableCrews,
         )
     }
 
     companion object {
+        private const val CrewOrderingLogTag = "CrewOrdering"
+
         fun factory(
             boatRepository: BoatRepository,
             remarkRepository: RemarkRepository,
@@ -1026,6 +1121,8 @@ class NewSessionViewModel(
             rowerRepository: RowerRepository,
             sessionRepository: SessionRepository,
             boatPhotoStorage: BoatPhotoStorage,
+            appPreferencesStore: AppPreferencesStore,
+            crewStore: CrewStore,
             sessionId: Long? = null,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
@@ -1038,6 +1135,8 @@ class NewSessionViewModel(
                         rowerRepository = rowerRepository,
                         sessionRepository = sessionRepository,
                         boatPhotoStorage = boatPhotoStorage,
+                        appPreferencesStore = appPreferencesStore,
+                        crewStore = crewStore,
                         sessionId = sessionId,
                     ) as T
                 }
@@ -1055,7 +1154,7 @@ enum class BoatSelectionStatus {
 fun BoatSelectionStatus.label(): String {
     return when (this) {
         BoatSelectionStatus.AVAILABLE -> "● Disponible"
-        BoatSelectionStatus.IN_USE -> "● Déjà utilisé"
+        BoatSelectionStatus.IN_USE -> "● En cours d'utilisation"
         BoatSelectionStatus.IN_REPAIR -> "● En réparation"
     }
 }

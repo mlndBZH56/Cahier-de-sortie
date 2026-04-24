@@ -3,8 +3,10 @@ package com.aca56.cahiersortiecodex.feature.remarks.presentation
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments
+import androidx.activity.result.contract.ActivityResultContracts.TakePicturePreview
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,9 +50,11 @@ import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
+import com.aca56.cahiersortiecodex.ui.components.AppImageViewerDialog
 import com.aca56.cahiersortiecodex.ui.components.DeleteConfirmationDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
+import com.aca56.cahiersortiecodex.ui.components.PhotoSourceChooserDialog
 import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.currentStorageDate
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
@@ -76,13 +80,37 @@ fun RemarksRoute(
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
+    var showPhotoSourceChooser by remember { mutableStateOf(false) }
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = OpenMultipleDocuments(),
     ) { uris ->
-        uris.forEach(viewModel::addPhoto)
+        uris.forEach { uri -> viewModel.addPhoto(uri) }
         if (uris.isEmpty()) {
             viewModel.clearMessage()
         }
+    }
+    val photoCameraLauncher = rememberLauncherForActivityResult(
+        contract = TakePicturePreview(),
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.addPhoto(bitmap)
+        } else {
+            viewModel.clearMessage()
+        }
+    }
+
+    if (showPhotoSourceChooser) {
+        PhotoSourceChooserDialog(
+            onDismiss = { showPhotoSourceChooser = false },
+            onTakePhoto = {
+                showPhotoSourceChooser = false
+                photoCameraLauncher.launch(null)
+            },
+            onPickFromGallery = {
+                showPhotoSourceChooser = false
+                photoPickerLauncher.launch(arrayOf("image/*"))
+            },
+        )
     }
 
     RemarksScreen(
@@ -97,7 +125,7 @@ fun RemarksRoute(
         onEditorContentChanged = viewModel::onEditorContentChanged,
         onEditorStatusChanged = viewModel::onEditorStatusChanged,
         onBoatForEditorSelected = viewModel::onBoatForEditorSelected,
-        onAddPhoto = { photoPickerLauncher.launch(arrayOf("image/*")) },
+        onAddPhoto = { showPhotoSourceChooser = true },
         onRemovePhoto = viewModel::removePhoto,
         onSaveRemark = viewModel::saveRemark,
         onDeleteRemark = viewModel::deleteRemark,
@@ -144,11 +172,13 @@ fun RemarksScreen(
     var remarkPendingDeleteKey by remember { mutableStateOf<String?>(null) }
     var repairUpdatePendingDeleteId by remember { mutableStateOf<Long?>(null) }
     var selectedRemarkForDetailsKey by remember { mutableStateOf<String?>(null) }
+    var selectedRemarkForHistoryKey by remember { mutableStateOf<String?>(null) }
     var selectedRepairUpdateForDetailsId by remember { mutableStateOf<Long?>(null) }
     var filterBoatSearchQuery by remember { mutableStateOf("") }
     var editorBoatSearchQuery by remember { mutableStateOf("") }
     val editingRemark = uiState.editingRemark
     val selectedRemarkForDetails = uiState.remarks.firstOrNull { it.key == selectedRemarkForDetailsKey }
+    val selectedRemarkForHistory = uiState.remarks.firstOrNull { it.key == selectedRemarkForHistoryKey }
     val selectedRepairUpdateForDetails = uiState.repairUpdatesByRemarkId.values
         .flatten()
         .firstOrNull { it.id == selectedRepairUpdateForDetailsId }
@@ -304,11 +334,11 @@ fun RemarksScreen(
             RepairUpdateEditorCard(
                 mode = uiState.repairUpdateMode,
                 content = uiState.repairUpdateContentInput,
-                photoPath = uiState.repairUpdatePhotoPath,
+                photoPaths = uiState.repairUpdatePhotoPaths,
                 isSaving = uiState.isSaving,
                 onContentChanged = onRepairUpdateContentChanged,
                 onAddPhoto = onAddPhoto,
-                onRemovePhoto = { onRemovePhoto(null) },
+                onRemovePhoto = onRemovePhoto,
                 onCancel = onCancelRepairUpdate,
                 onSave = onSaveRepairUpdate,
             )
@@ -320,12 +350,33 @@ fun RemarksScreen(
             remark = remark,
             repairUpdates = uiState.repairUpdatesByRemarkId[remark.id].orEmpty(),
             onDismiss = { selectedRemarkForDetailsKey = null },
+            onViewRepairHistory = {
+                selectedRemarkForDetailsKey = null
+                selectedRemarkForHistoryKey = remark.key
+            },
             onEditRepairUpdate = { updateId ->
                 selectedRemarkForDetailsKey = null
                 onEditRepairUpdate(updateId)
             },
             onDeleteRepairUpdate = { updateId ->
                 selectedRemarkForDetailsKey = null
+                repairUpdatePendingDeleteId = updateId
+            },
+            onViewRepairUpdatePhotos = { updateId -> selectedRepairUpdateForDetailsId = updateId },
+        )
+    }
+
+    selectedRemarkForHistory?.let { remark ->
+        RepairHistoryDialog(
+            remark = remark,
+            repairUpdates = uiState.repairUpdatesByRemarkId[remark.id].orEmpty(),
+            onDismiss = { selectedRemarkForHistoryKey = null },
+            onEditRepairUpdate = { updateId ->
+                selectedRemarkForHistoryKey = null
+                onEditRepairUpdate(updateId)
+            },
+            onDeleteRepairUpdate = { updateId ->
+                selectedRemarkForHistoryKey = null
                 repairUpdatePendingDeleteId = updateId
             },
             onViewRepairUpdatePhotos = { updateId -> selectedRepairUpdateForDetailsId = updateId },
@@ -732,7 +783,16 @@ private fun RowScope.RemarkStatusButton(
 
 @Composable
 private fun RemarkPhotoPreview(photoPath: String) {
+    var showFullscreenViewer by remember(photoPath) { mutableStateOf(false) }
     val bitmap = remember(photoPath) { BitmapFactory.decodeFile(photoPath) }
+
+    if (showFullscreenViewer) {
+        AppImageViewerDialog(
+            filePath = photoPath,
+            onDismiss = { showFullscreenViewer = false },
+        )
+    }
+
     if (bitmap != null) {
         Image(
             bitmap = bitmap.asImageBitmap(),
@@ -740,7 +800,8 @@ private fun RemarkPhotoPreview(photoPath: String) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 4.dp)
-                .clip(RoundedCornerShape(16.dp)),
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { showFullscreenViewer = true },
             contentScale = ContentScale.FillWidth,
         )
     }
@@ -774,12 +835,12 @@ private fun RepairUpdateCard(
                 text = update.content,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            if (update.photoPath != null) {
+            if (update.photoPaths.isNotEmpty()) {
                 OutlinedButton(
                     onClick = onViewPhotos,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Voir les photos")
+                    Text("Voir les photos (${update.photoPaths.size})")
                 }
             }
             Row(
@@ -801,11 +862,11 @@ private fun RepairUpdateCard(
 private fun RepairUpdateEditorCard(
     mode: RepairUpdateMode,
     content: String,
-    photoPath: String?,
+    photoPaths: List<String>,
     isSaving: Boolean,
     onContentChanged: (String) -> Unit,
     onAddPhoto: () -> Unit,
-    onRemovePhoto: () -> Unit,
+    onRemovePhoto: (String?) -> Unit,
     onCancel: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -849,8 +910,23 @@ private fun RepairUpdateEditorCard(
                     keyboardType = KeyboardType.Text,
                 ),
             )
-            photoPath?.let { path ->
-                RemarkPhotoPreview(photoPath = path)
+            if (photoPaths.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    photoPaths.forEachIndexed { index, path ->
+                        Text(
+                            text = "Photo ${index + 1}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        RemarkPhotoPreview(photoPath = path)
+                        OutlinedButton(
+                            onClick = { onRemovePhoto(path) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Supprimer cette photo")
+                        }
+                    }
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -860,15 +936,7 @@ private fun RepairUpdateEditorCard(
                     onClick = onAddPhoto,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(if (photoPath == null) "Ajouter une photo" else "Changer la photo")
-                }
-                if (photoPath != null) {
-                    OutlinedButton(
-                        onClick = onRemovePhoto,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Retirer la photo")
-                    }
+                    Text(if (photoPaths.isEmpty()) "Ajouter des photos" else "Ajouter d'autres photos")
                 }
             }
             Row(
@@ -898,6 +966,7 @@ private fun RemarkDetailsDialog(
     remark: RemarkItemUi,
     repairUpdates: List<RepairUpdateItemUi>,
     onDismiss: () -> Unit,
+    onViewRepairHistory: () -> Unit,
     onEditRepairUpdate: (Long) -> Unit,
     onDeleteRepairUpdate: (Long) -> Unit,
     onViewRepairUpdatePhotos: (Long) -> Unit,
@@ -926,7 +995,19 @@ private fun RemarkDetailsDialog(
                     }
                 }
 
-                if (repairUpdates.isNotEmpty()) {
+                if (repairUpdates.isNotEmpty() && remark.status == RemarkStatus.REPAIRED) {
+                    Text(
+                        text = "${repairUpdates.size} messages de suivi",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    OutlinedButton(
+                        onClick = onViewRepairHistory,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Voir les détails")
+                    }
+                } else if (repairUpdates.isNotEmpty()) {
                     Text(
                         text = "Suivis",
                         style = MaterialTheme.typography.titleMedium,
@@ -940,6 +1021,54 @@ private fun RemarkDetailsDialog(
                             onViewPhotos = { onViewRepairUpdatePhotos(update.id) },
                         )
                     }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer")
+            }
+        },
+    )
+}
+
+@Composable
+private fun RepairHistoryDialog(
+    remark: RemarkItemUi,
+    repairUpdates: List<RepairUpdateItemUi>,
+    onDismiss: () -> Unit,
+    onEditRepairUpdate: (Long) -> Unit,
+    onDeleteRepairUpdate: (Long) -> Unit,
+    onViewRepairUpdatePhotos: (Long) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Historique de réparation") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Remarque d'origine")
+                Text(remark.content)
+                Text("Statut : ${remark.status.displayLabel()}")
+                if (remark.photoPaths.isNotEmpty()) {
+                    Text(
+                        text = "Photos de la remarque",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    remark.photoPaths.forEach { path ->
+                        RemarkPhotoPreview(photoPath = path)
+                    }
+                }
+                repairUpdates.forEach { update ->
+                    RepairUpdateCard(
+                        update = update,
+                        onEdit = { onEditRepairUpdate(update.id) },
+                        onDelete = { onDeleteRepairUpdate(update.id) },
+                        onViewPhotos = { onViewRepairUpdatePhotos(update.id) },
+                    )
                 }
             }
         },
@@ -966,9 +1095,13 @@ private fun RepairUpdatePhotosDialog(
             ) {
                 Text(update.createdAt)
                 Text(update.content)
-                update.photoPath?.let { path ->
+                if (update.photoPaths.isEmpty()) {
+                    Text("Aucune photo associée.")
+                } else {
+                    update.photoPaths.forEach { path ->
                     RemarkPhotoPreview(photoPath = path)
-                } ?: Text("Aucune photo associée.")
+                    }
+                }
             }
         },
         confirmButton = {

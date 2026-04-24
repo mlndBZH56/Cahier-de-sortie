@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
+import com.aca56.cahiersortiecodex.data.crew.CrewStore
 import com.aca56.cahiersortiecodex.data.local.AppDatabase
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
 import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
@@ -42,8 +43,16 @@ class AppContainer(context: Context) {
     val appIconManager: AppIconManager by lazy {
         AppIconManager(appContext)
     }
+    val crewStore: CrewStore by lazy {
+        CrewStore(appContext)
+    }
     val backupManager: DatabaseBackupManager by lazy {
-        DatabaseBackupManager(appContext)
+        DatabaseBackupManager(
+            context = appContext,
+            pinCodeStore = pinCodeStore,
+            appPreferencesStore = appPreferencesStore,
+            crewStore = crewStore,
+        )
     }
     val boatPhotoStorage: BoatPhotoStorage by lazy {
         BoatPhotoStorage(appContext)

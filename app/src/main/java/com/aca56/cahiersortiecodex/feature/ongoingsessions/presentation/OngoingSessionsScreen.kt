@@ -19,12 +19,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -338,7 +338,7 @@ private fun OngoingSessionCard(
                 if (uiState.isBulkSelectionMode) {
                     Modifier.clickable { onToggleSelected() }
                 } else {
-                    Modifier
+                    Modifier.clickable { onOpenSession() }
                 },
             ),
         shape = RoundedCornerShape(20.dp),
@@ -388,38 +388,32 @@ private fun OngoingSessionCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                Button(
-                    onClick = {
-                        if (isOpened) {
-                            onFermerSession()
-                        } else {
-                            onOpenSession()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (isOpened) "Masquer les détails" else "Ouvrir la session")
-                }
-            }
-
-            if (!uiState.isBulkSelectionMode && isOpened) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                SessionInlineEditorCard(
-                    session = session,
-                    uiState = uiState,
-                    onFermerSession = onFermerSession,
-                    onEndTimeChanged = onEndTimeChanged,
-                    onKmChanged = onKmChanged,
-                    onRemarksChanged = onRemarksChanged,
-                    onDestinationSelected = onDestinationSelected,
-                    onCustomDestinationSelected = onCustomDestinationSelected,
-                    onDestinationChanged = onDestinationChanged,
-                    onCompleteSession = onCompleteSession,
-                    onDeleteSession = onDeleteSession,
-                    onEditSession = onEditSession,
+                Text(
+                    text = "Touchez la carte pour clôturer rapidement cette session.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+
+    if (!uiState.isBulkSelectionMode && isOpened) {
+        CompleteSessionDialog(
+            session = session,
+            uiState = uiState,
+            onDismiss = onFermerSession,
+            onEndTimeChanged = onEndTimeChanged,
+            onKmChanged = onKmChanged,
+            onRemarksChanged = onRemarksChanged,
+            onDestinationSelected = onDestinationSelected,
+            onCustomDestinationSelected = onCustomDestinationSelected,
+            onDestinationChanged = onDestinationChanged,
+            onCompleteSession = onCompleteSession,
+            onEditSession = {
+                onFermerSession()
+                onEditSession(session.id)
+            },
+            onDeleteSession = onDeleteSession,
+        )
     }
 }
 
@@ -583,10 +577,10 @@ private fun BulkCompletionCard(
 }
 
 @Composable
-private fun SessionInlineEditorCard(
+private fun CompleteSessionDialog(
     session: OngoingSessionItemUi,
     uiState: OngoingSessionsUiState,
-    onFermerSession: () -> Unit,
+    onDismiss: () -> Unit,
     onEndTimeChanged: (String) -> Unit,
     onKmChanged: (String) -> Unit,
     onRemarksChanged: (String) -> Unit,
@@ -594,8 +588,8 @@ private fun SessionInlineEditorCard(
     onCustomDestinationSelected: () -> Unit,
     onDestinationChanged: (String) -> Unit,
     onCompleteSession: () -> Unit,
+    onEditSession: () -> Unit,
     onDeleteSession: () -> Unit,
-    onEditSession: (Long) -> Unit,
 ) {
     val trackedOnKmChanged = rememberInteractionAwareValueChange(onKmChanged)
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
@@ -618,187 +612,112 @@ private fun SessionInlineEditorCard(
         )
     }
 
-    Text(
-        text = "Terminer cette session",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.SemiBold,
-    )
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "Données de départ",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            Text("Date : ${formatDateForDisplay(session.date)}")
-            Text("Heure de départ : ${session.startTime}")
-            Text("Bateau : ${session.boatName}")
-            Text(
-                text = "Rameurs : ${session.rowerNames.ifEmpty { listOf("Aucun rameur") }.joinToString()}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = "Données de fin",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-            )
-
-            AppSelectorFieldButton(
-                onClick = {
-                    showEndTimePicker = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    if (uiState.endTime.isBlank()) {
-                        "Heure de fin : non définie"
-                    } else {
-                        "Heure de fin : ${uiState.endTime}"
-                    },
-                )
-            }
-
-            Box(modifier = Modifier.fillMaxWidth()) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Clôturer la session") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AppSelectorFieldButton(
-                    onClick = {
-                        destinationMenuExpanded = true
-                    },
+                    onClick = { showEndTimePicker = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Destination : $selectedDestinationLabel")
-                }
-
-                DropdownMenu(
-                    expanded = destinationMenuExpanded,
-                    onDismissRequest = { destinationMenuExpanded = false },
-                    modifier = Modifier.fillMaxWidth(0.92f),
-                ) {
-                    DropdownMenuItem(
-                            text = { Text("Aucune destination") },
-                        onClick = {
-                            onDestinationSelected(null)
-                            destinationMenuExpanded = false
-                        },
+                    Text(
+                        if (uiState.endTime.isBlank()) "Heure de fin : non définie" else "Heure de fin : ${uiState.endTime}",
                     )
-                    uiState.availableDestinations.forEach { destination ->
+                }
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    AppSelectorFieldButton(
+                        onClick = { destinationMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Destination : $selectedDestinationLabel")
+                    }
+                    DropdownMenu(
+                        expanded = destinationMenuExpanded,
+                        onDismissRequest = { destinationMenuExpanded = false },
+                        modifier = Modifier.fillMaxWidth(0.92f),
+                    ) {
                         DropdownMenuItem(
-                            text = { Text(destination.name) },
+                            text = { Text("Aucune destination") },
                             onClick = {
-                                onDestinationSelected(destination.id)
+                                onDestinationSelected(null)
+                                destinationMenuExpanded = false
+                            },
+                        )
+                        uiState.availableDestinations.forEach { destination ->
+                            DropdownMenuItem(
+                                text = { Text(destination.name) },
+                                onClick = {
+                                    onDestinationSelected(destination.id)
+                                    destinationMenuExpanded = false
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Autre") },
+                            onClick = {
+                                onCustomDestinationSelected()
                                 destinationMenuExpanded = false
                             },
                         )
                     }
-                    DropdownMenuItem(
-                            text = { Text("Autre") },
-                        onClick = {
-                            onCustomDestinationSelected()
-                            destinationMenuExpanded = false
-                        },
+                }
+                if (uiState.isCustomDestination) {
+                    OutlinedTextField(
+                        value = uiState.destination,
+                        onValueChange = trackedOnDestinationChanged,
+                        label = { Text("Destination personnalisée") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        singleLine = true,
+                        maxLines = 1,
                     )
                 }
-            }
-
-            if (uiState.isCustomDestination) {
                 OutlinedTextField(
-                    value = uiState.destination,
-                    onValueChange = trackedOnDestinationChanged,
-                    label = { Text("Destination personnalisée") },
+                    value = uiState.km,
+                    onValueChange = trackedOnKmChanged,
+                    label = { Text("Km") },
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     maxLines = 1,
                 )
+                OutlinedTextField(
+                    value = uiState.remarks,
+                    onValueChange = trackedOnRemarksChanged,
+                    label = { Text("Remarques") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                )
+                OutlinedButton(
+                    onClick = onEditSession,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Modifier la session complète")
+                }
+                TextButton(
+                    onClick = {
+                        onDismiss()
+                        onDeleteSession()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Supprimer la session")
+                }
             }
-
-            OutlinedTextField(
-                value = uiState.km,
-                onValueChange = trackedOnKmChanged,
-                label = { Text("Km") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                ),
-                singleLine = true,
-                maxLines = 1,
-            )
-
-            OutlinedTextField(
-                value = uiState.remarks,
-                onValueChange = trackedOnRemarksChanged,
-                label = { Text("Remarques") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                ),
-            )
-        }
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        OutlinedButton(
-            onClick = onFermerSession,
-            modifier = Modifier.weight(1f),
-        ) {
-        Text("Fermer")
-        }
-        Button(
-            onClick = { onEditSession(session.id) },
-            modifier = Modifier.weight(1f),
-        ) {
-            Text("Modifier la session")
-        }
-    }
-
-    Button(
-        onClick = onCompleteSession,
-        enabled = uiState.canComplete,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp),
-    ) {
-        Text(if (uiState.isSaving) "Enregistrement..." else "Terminer la session")
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-    ) {
-        OutlinedButton(
-            onClick = onDeleteSession,
-            enabled = !uiState.isSaving,
-        ) {
-                Text("Supprimer")
-        }
-    }
-
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Annuler")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onCompleteSession,
+                enabled = uiState.canComplete,
+            ) {
+                Text(if (uiState.isSaving) "Enregistrement..." else "Valider")
+            }
+        },
+    )
 }

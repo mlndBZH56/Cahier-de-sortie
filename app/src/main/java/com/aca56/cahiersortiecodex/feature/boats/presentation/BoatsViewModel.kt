@@ -1,5 +1,6 @@
 package com.aca56.cahiersortiecodex.feature.boats.presentation
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -8,12 +9,14 @@ import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
+import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
 import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
+import com.aca56.cahiersortiecodex.data.repository.RepairUpdateRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import kotlinx.coroutines.Dispatchers
@@ -67,6 +70,7 @@ data class BoatDetailUi(
     val notes: String = "",
     val status: BoatStatusUi = BoatStatusUi.AVAILABLE,
     val remarks: List<RemarkEntity> = emptyList(),
+    val repairUpdatesByRemarkId: Map<Long, List<RepairUpdateEntity>> = emptyMap(),
     val photos: List<BoatPhotoUi> = emptyList(),
     val recentSessions: List<BoatSessionSummaryUi> = emptyList(),
     val allSessions: List<BoatSessionSummaryUi> = emptyList(),
@@ -186,6 +190,7 @@ class BoatDetailViewModel(
     private val boatRepository: BoatRepository,
     private val boatPhotoRepository: BoatPhotoRepository,
     private val remarkRepository: RemarkRepository,
+    private val repairUpdateRepository: RepairUpdateRepository,
     private val sessionRepository: SessionRepository,
     private val boatPhotoStorage: BoatPhotoStorage,
 ) : ViewModel() {
@@ -344,6 +349,10 @@ class BoatDetailViewModel(
     }
 
     fun addPhoto(uri: Uri) {
+        addPhotos(listOf(uri))
+    }
+
+    fun addPhoto(bitmap: Bitmap) {
         val currentBoatId = uiState.value.boat.id
         if (currentBoatId == 0L) {
             showError("Enregistrez d'abord le bateau avant d'ajouter une photo.")
@@ -353,7 +362,7 @@ class BoatDetailViewModel(
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val filePath = boatPhotoStorage.importCompressedPhoto(uri)
+                    val filePath = boatPhotoStorage.saveCompressedBitmap(bitmap)
                     boatPhotoRepository.savePhoto(
                         BoatPhotoEntity(
                             boatId = currentBoatId,
@@ -366,6 +375,41 @@ class BoatDetailViewModel(
                 uiStateMutable.update {
                     it.copy(
                         message = "Photo ajoutée.",
+                        messageType = FeedbackDialogType.SUCCESS,
+                    )
+                }
+            }.onFailure {
+                showError("Impossible d'ajouter la photo.")
+            }
+        }
+    }
+
+    fun addPhotos(uris: List<Uri>) {
+        val currentBoatId = uiState.value.boat.id
+        if (currentBoatId == 0L) {
+            showError("Enregistrez d'abord le bateau avant d'ajouter une photo.")
+            return
+        }
+        if (uris.isEmpty()) return
+
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    uris.forEach { uri ->
+                        val filePath = boatPhotoStorage.importCompressedPhoto(uri)
+                        boatPhotoRepository.savePhoto(
+                            BoatPhotoEntity(
+                                boatId = currentBoatId,
+                                filePath = filePath,
+                                createdAt = currentStorageDate(),
+                            ),
+                        )
+                    }
+                }
+            }.onSuccess {
+                uiStateMutable.update {
+                    it.copy(
+                        message = if (uris.size == 1) "Photo ajoutée." else "${uris.size} photos ajoutées.",
                         messageType = FeedbackDialogType.SUCCESS,
                     )
                 }
@@ -413,17 +457,20 @@ class BoatDetailViewModel(
                 boatRepository.observeBoat(observedBoatId),
                 boatPhotoRepository.observePhotosByBoat(observedBoatId),
                 remarkRepository.observeRemarksByBoat(observedBoatId),
+                repairUpdateRepository.observeUpdates(),
                 sessionRepository.observeSessionsWithDetails(),
                 sessionRepository.observeSessionsWithDetailsByStatus(SessionStatus.ONGOING),
             ) { values ->
                 val boat = values[0] as BoatEntity?
                 val photos = values[1] as List<BoatPhotoEntity>
                 val remarks = values[2] as List<RemarkEntity>
-                val sessions = values[3] as List<SessionWithDetails>
-                val ongoingSessions = values[4] as List<SessionWithDetails>
+                val repairUpdates = values[3] as List<RepairUpdateEntity>
+                val sessions = values[4] as List<SessionWithDetails>
+                val ongoingSessions = values[5] as List<SessionWithDetails>
                 boat?.toDetailUi(
                     photos = photos,
                     remarks = remarks,
+                    repairUpdates = repairUpdates,
                     sessions = sessions,
                     ongoingSessions = ongoingSessions,
                 )
@@ -447,6 +494,7 @@ class BoatDetailViewModel(
     private fun BoatEntity.toDetailUi(
         photos: List<BoatPhotoEntity>,
         remarks: List<RemarkEntity>,
+        repairUpdates: List<RepairUpdateEntity>,
         sessions: List<SessionWithDetails>,
         ongoingSessions: List<SessionWithDetails>,
     ): BoatDetailUi {
@@ -480,6 +528,9 @@ class BoatDetailViewModel(
             notes = notes,
             status = status,
             remarks = remarks.sortedWith(compareBy<RemarkEntity> { it.status.priority() }.thenByDescending { it.date }.thenByDescending { it.id }),
+            repairUpdatesByRemarkId = repairUpdates
+                .filter { update -> remarks.any { it.id == update.remarkId } }
+                .groupBy { it.remarkId },
             photos = photos.map { photo ->
                 BoatPhotoUi(
                     id = photo.id,
@@ -519,6 +570,7 @@ class BoatDetailViewModel(
             boatRepository: BoatRepository,
             boatPhotoRepository: BoatPhotoRepository,
             remarkRepository: RemarkRepository,
+            repairUpdateRepository: RepairUpdateRepository,
             sessionRepository: SessionRepository,
             boatPhotoStorage: BoatPhotoStorage,
         ): ViewModelProvider.Factory {
@@ -530,6 +582,7 @@ class BoatDetailViewModel(
                         boatRepository = boatRepository,
                         boatPhotoRepository = boatPhotoRepository,
                         remarkRepository = remarkRepository,
+                        repairUpdateRepository = repairUpdateRepository,
                         sessionRepository = sessionRepository,
                         boatPhotoStorage = boatPhotoStorage,
                     ) as T

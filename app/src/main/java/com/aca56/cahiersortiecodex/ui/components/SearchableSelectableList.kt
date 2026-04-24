@@ -16,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 private const val InitialVisibleSelectionCount = 5
+private const val SelectionPageSize = 5
 
 @Composable
 private fun selectionSecondaryLabelColor(
@@ -82,13 +84,51 @@ data class SearchableSelectableOption(
 
 private fun visibleSelectionOptions(
     options: List<SearchableSelectableOption>,
-    showAll: Boolean,
+    visibleCount: Int,
 ): List<SearchableSelectableOption> {
-    return if (showAll) {
-        options
+    return options.take(visibleCount.coerceAtMost(options.size))
+}
+
+private fun reorderMultiSelectOptions(
+    options: List<SearchableSelectableOption>,
+    selectedKeys: Set<String>,
+    searchQuery: String,
+): List<SearchableSelectableOption> {
+    val deduplicated = options.distinctBy { it.key }
+    val query = searchQuery.trim()
+    val selected = deduplicated.filter { it.key in selectedKeys }
+    val remaining = deduplicated.filterNot { it.key in selectedKeys }
+    val matching = if (query.isBlank()) {
+        emptyList()
     } else {
-        options.take(InitialVisibleSelectionCount)
+        remaining.filter { option ->
+            option.label.contains(query, ignoreCase = true)
+        }
     }
+    val matchingKeys = matching.mapTo(mutableSetOf()) { it.key }
+    val fallback = remaining.filterNot { it.key in matchingKeys }
+    return selected + matching + fallback
+}
+
+private fun reorderSingleSelectOptions(
+    options: List<SearchableSelectableOption>,
+    selectedKey: String?,
+    searchQuery: String,
+): List<SearchableSelectableOption> {
+    val deduplicated = options.distinctBy { it.key }
+    val selected = selectedKey?.let { key -> deduplicated.filter { it.key == key } }.orEmpty()
+    val remaining = deduplicated.filterNot { it.key == selectedKey }
+    val query = searchQuery.trim()
+    val matching = if (query.isBlank()) {
+        emptyList()
+    } else {
+        remaining.filter { option ->
+            option.label.contains(query, ignoreCase = true)
+        }
+    }
+    val matchingKeys = matching.mapTo(mutableSetOf()) { it.key }
+    val fallback = remaining.filterNot { it.key in matchingKeys }
+    return selected + matching + fallback
 }
 
 @Composable
@@ -103,8 +143,17 @@ fun SearchableSelectableList(
     onOptionToggled: (String) -> Unit,
 ) {
     val trackedOnSearchQueryChanged = rememberInteractionAwareValueChange(onSearchQueryChanged)
-    var showAll by remember(searchQuery, options) { mutableStateOf(false) }
-    val visibleOptions = visibleSelectionOptions(options = options, showAll = showAll)
+    var visibleCount by remember(searchQuery) { mutableStateOf(InitialVisibleSelectionCount) }
+    val orderedOptions = reorderMultiSelectOptions(
+        options = options,
+        selectedKeys = selectedKeys,
+        searchQuery = searchQuery,
+    )
+    val visibleOptions = visibleSelectionOptions(options = orderedOptions, visibleCount = visibleCount)
+
+    LaunchedEffect(selectedKeys) {
+        visibleCount = InitialVisibleSelectionCount
+    }
 
     AppTextField(
         value = searchQuery,
@@ -114,7 +163,7 @@ fun SearchableSelectableList(
         type = AppTextFieldType.SEARCH,
     )
 
-    if (options.isEmpty()) {
+    if (orderedOptions.isEmpty()) {
         Text(
             text = if (searchQuery.isBlank()) emptyLabel else noResultsLabel,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -168,11 +217,22 @@ fun SearchableSelectableList(
         }
     }
 
-    if (options.size > InitialVisibleSelectionCount) {
-        TextButton(
-            onClick = { showAll = !showAll },
-        ) {
-            Text(if (showAll) "Voir moins" else "Voir plus")
+    if (orderedOptions.size > InitialVisibleSelectionCount) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (visibleCount < orderedOptions.size) {
+                TextButton(
+                    onClick = { visibleCount += SelectionPageSize },
+                ) {
+                    Text("Voir plus")
+                }
+            }
+            if (visibleCount > InitialVisibleSelectionCount) {
+                TextButton(
+                    onClick = { visibleCount = InitialVisibleSelectionCount },
+                ) {
+                    Text("Voir moins")
+                }
+            }
         }
     }
 }
@@ -189,8 +249,17 @@ fun SearchableSingleSelectList(
     onOptionSelected: (String) -> Unit,
 ) {
     val trackedOnSearchQueryChanged = rememberInteractionAwareValueChange(onSearchQueryChanged)
-    var showAll by remember(searchQuery, options) { mutableStateOf(false) }
-    val visibleOptions = visibleSelectionOptions(options = options, showAll = showAll)
+    var visibleCount by remember(searchQuery) { mutableStateOf(InitialVisibleSelectionCount) }
+    val orderedOptions = reorderSingleSelectOptions(
+        options = options,
+        selectedKey = selectedKey,
+        searchQuery = searchQuery,
+    )
+    val visibleOptions = visibleSelectionOptions(options = orderedOptions, visibleCount = visibleCount)
+
+    LaunchedEffect(selectedKey) {
+        visibleCount = InitialVisibleSelectionCount
+    }
 
     AppTextField(
         value = searchQuery,
@@ -200,7 +269,7 @@ fun SearchableSingleSelectList(
         type = AppTextFieldType.SEARCH,
     )
 
-    if (options.isEmpty()) {
+    if (orderedOptions.isEmpty()) {
         Text(
             text = if (searchQuery.isBlank()) emptyLabel else noResultsLabel,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -254,11 +323,22 @@ fun SearchableSingleSelectList(
         }
     }
 
-    if (options.size > InitialVisibleSelectionCount) {
-        TextButton(
-            onClick = { showAll = !showAll },
-        ) {
-            Text(if (showAll) "Voir moins" else "Voir plus")
+    if (orderedOptions.size > InitialVisibleSelectionCount) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (visibleCount < orderedOptions.size) {
+                TextButton(
+                    onClick = { visibleCount += SelectionPageSize },
+                ) {
+                    Text("Voir plus")
+                }
+            }
+            if (visibleCount > InitialVisibleSelectionCount) {
+                TextButton(
+                    onClick = { visibleCount = InitialVisibleSelectionCount },
+                ) {
+                    Text("Voir moins")
+                }
+            }
         }
     }
 }

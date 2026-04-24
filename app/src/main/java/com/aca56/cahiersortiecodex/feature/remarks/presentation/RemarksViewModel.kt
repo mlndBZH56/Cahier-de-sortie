@@ -1,5 +1,6 @@
 package com.aca56.cahiersortiecodex.feature.remarks.presentation
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -57,7 +58,7 @@ data class RepairUpdateItemUi(
     val id: Long,
     val remarkId: Long,
     val content: String,
-    val photoPath: String?,
+    val photoPaths: List<String>,
     val createdAt: String,
 )
 
@@ -84,7 +85,7 @@ data class RemarksUiState(
     val editingRepairUpdateId: Long? = null,
     val repairUpdateMode: RepairUpdateMode = RepairUpdateMode.FOLLOW_UP,
     val repairUpdateContentInput: String = "",
-    val repairUpdatePhotoPath: String? = null,
+    val repairUpdatePhotoPaths: List<String> = emptyList(),
     val isSaving: Boolean = false,
     val message: String? = null,
     val messageType: FeedbackDialogType? = null,
@@ -173,7 +174,7 @@ class RemarksViewModel(
                 repairUpdateRemarkKey = null,
                 editingRepairUpdateId = null,
                 repairUpdateContentInput = "",
-                repairUpdatePhotoPath = null,
+                repairUpdatePhotoPaths = emptyList(),
                 message = null,
                 messageType = null,
             )
@@ -193,7 +194,7 @@ class RemarksViewModel(
                 repairUpdateRemarkKey = null,
                 editingRepairUpdateId = null,
                 repairUpdateContentInput = "",
-                repairUpdatePhotoPath = null,
+                repairUpdatePhotoPaths = emptyList(),
                 message = null,
                 messageType = null,
             )
@@ -223,7 +224,7 @@ class RemarksViewModel(
                 repairUpdateRemarkKey = null,
                 editingRepairUpdateId = null,
                 repairUpdateContentInput = "",
-                repairUpdatePhotoPath = null,
+                repairUpdatePhotoPaths = emptyList(),
                 message = null,
                 messageType = null,
             )
@@ -261,7 +262,7 @@ class RemarksViewModel(
                 repairUpdateRemarkKey = remark.key,
                 repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                 repairUpdateContentInput = "",
-                repairUpdatePhotoPath = null,
+                repairUpdatePhotoPaths = emptyList(),
                 editingRepairUpdateId = null,
                 isEditorVisible = false,
                 editingRemarkKey = null,
@@ -278,7 +279,7 @@ class RemarksViewModel(
                 repairUpdateRemarkKey = remark.key,
                 repairUpdateMode = RepairUpdateMode.CLOSE_REPAIR,
                 repairUpdateContentInput = "",
-                repairUpdatePhotoPath = null,
+                repairUpdatePhotoPaths = emptyList(),
                 editingRepairUpdateId = null,
                 isEditorVisible = false,
                 editingRemarkKey = null,
@@ -295,7 +296,7 @@ class RemarksViewModel(
                 editingRepairUpdateId = null,
                 repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                 repairUpdateContentInput = "",
-                repairUpdatePhotoPath = null,
+                repairUpdatePhotoPaths = emptyList(),
                 message = null,
                 messageType = null,
             )
@@ -318,7 +319,7 @@ class RemarksViewModel(
                 uiStateMutable.update {
                     if (it.repairUpdateRemarkKey != null) {
                         it.copy(
-                            repairUpdatePhotoPath = filePath,
+                            repairUpdatePhotoPaths = (it.repairUpdatePhotoPaths + filePath).distinct(),
                             message = null,
                             messageType = null,
                         )
@@ -341,17 +342,54 @@ class RemarksViewModel(
         }
     }
 
+    fun addPhoto(bitmap: Bitmap) {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    boatPhotoStorage.saveCompressedBitmap(bitmap)
+                }
+            }.onSuccess { filePath ->
+                uiStateMutable.update {
+                    if (it.repairUpdateRemarkKey != null) {
+                        it.copy(
+                            repairUpdatePhotoPaths = (it.repairUpdatePhotoPaths + filePath).distinct(),
+                            message = null,
+                            messageType = null,
+                        )
+                    } else {
+                        it.copy(
+                            editorPhotoPaths = (it.editorPhotoPaths + filePath).distinct(),
+                            message = null,
+                            messageType = null,
+                        )
+                    }
+                }
+            }.onFailure {
+                uiStateMutable.update {
+                    it.copy(
+                        message = "Impossible d'ajouter la photo.",
+                        messageType = FeedbackDialogType.ERROR,
+                    )
+                }
+            }
+        }
+    }
+
     fun removePhoto(path: String? = null) {
         val currentState = uiState.value
         val filePath = if (currentState.repairUpdateRemarkKey != null) {
-            currentState.repairUpdatePhotoPath
+            path ?: currentState.repairUpdatePhotoPaths.lastOrNull()
         } else {
             path
         }
         filePath?.let(boatPhotoStorage::deletePhoto)
         uiStateMutable.update {
             if (it.repairUpdateRemarkKey != null) {
-                it.copy(repairUpdatePhotoPath = null, message = null, messageType = null)
+                it.copy(
+                    repairUpdatePhotoPaths = filePath?.let { photo -> it.repairUpdatePhotoPaths - photo } ?: it.repairUpdatePhotoPaths,
+                    message = null,
+                    messageType = null,
+                )
             } else {
                 it.copy(
                     editorPhotoPaths = filePath?.let { photo -> it.editorPhotoPaths - photo } ?: it.editorPhotoPaths,
@@ -371,7 +409,7 @@ class RemarksViewModel(
                 editingRepairUpdateId = update.id,
                 repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                 repairUpdateContentInput = update.content,
-                repairUpdatePhotoPath = update.photoPath,
+                repairUpdatePhotoPaths = update.photoPaths,
                 isEditorVisible = false,
                 editingRemarkKey = null,
                 message = null,
@@ -384,13 +422,13 @@ class RemarksViewModel(
         val update = uiState.value.repairUpdatesByRemarkId.values.flatten().firstOrNull { it.id == updateId } ?: return
         viewModelScope.launch {
             runCatching {
-                update.photoPath?.let(boatPhotoStorage::deletePhoto)
+                update.photoPaths.forEach(boatPhotoStorage::deletePhoto)
                 repairUpdateRepository.deleteUpdate(
                     RepairUpdateEntity(
                         id = update.id,
                         remarkId = update.remarkId,
                         content = update.content,
-                        photoPath = update.photoPath,
+                        photoPath = encodeRemarkPhotoPaths(update.photoPaths),
                         createdAt = update.createdAt,
                     ),
                 )
@@ -402,7 +440,7 @@ class RemarksViewModel(
                         editingRepairUpdateId = if (it.editingRepairUpdateId == updateId) null else it.editingRepairUpdateId,
                         repairUpdateRemarkKey = if (it.editingRepairUpdateId == updateId) null else it.repairUpdateRemarkKey,
                         repairUpdateContentInput = if (it.editingRepairUpdateId == updateId) "" else it.repairUpdateContentInput,
-                        repairUpdatePhotoPath = if (it.editingRepairUpdateId == updateId) null else it.repairUpdatePhotoPath,
+                        repairUpdatePhotoPaths = if (it.editingRepairUpdateId == updateId) emptyList() else it.repairUpdatePhotoPaths,
                     )
                 }
             }.onFailure {
@@ -530,7 +568,7 @@ class RemarksViewModel(
                     RemarkSource.STANDALONE -> {
                         remark.photoPaths.forEach(boatPhotoStorage::deletePhoto)
                         uiState.value.repairUpdatesByRemarkId[remark.id].orEmpty()
-                            .forEach { update -> update.photoPath?.let(boatPhotoStorage::deletePhoto) }
+                            .forEach { update -> update.photoPaths.forEach(boatPhotoStorage::deletePhoto) }
                         remarkRepository.deleteRemark(
                             RemarkEntity(
                                 id = remark.id,
@@ -567,7 +605,7 @@ class RemarksViewModel(
                         editingRepairUpdateId = if (it.repairUpdateRemarkKey == remark.key) null else it.editingRepairUpdateId,
                         repairUpdateMode = if (it.repairUpdateRemarkKey == remark.key) RepairUpdateMode.FOLLOW_UP else it.repairUpdateMode,
                         repairUpdateContentInput = if (it.repairUpdateRemarkKey == remark.key) "" else it.repairUpdateContentInput,
-                        repairUpdatePhotoPath = if (it.repairUpdateRemarkKey == remark.key) null else it.repairUpdatePhotoPath,
+                        repairUpdatePhotoPaths = if (it.repairUpdateRemarkKey == remark.key) emptyList() else it.repairUpdatePhotoPaths,
                         message = "Remarque supprimée.",
                         messageType = FeedbackDialogType.SUCCESS,
                     )
@@ -592,7 +630,7 @@ class RemarksViewModel(
         if (
             state.repairUpdateMode == RepairUpdateMode.FOLLOW_UP &&
             content.isBlank() &&
-            state.repairUpdatePhotoPath == null
+            state.repairUpdatePhotoPaths.isEmpty()
         ) {
             uiStateMutable.update {
                 it.copy(
@@ -617,7 +655,7 @@ class RemarksViewModel(
                                 "Suivi de réparation"
                             }
                         },
-                        photoPath = state.repairUpdatePhotoPath,
+                        photoPath = encodeRemarkPhotoPaths(state.repairUpdatePhotoPaths),
                         createdAt = currentRepairUpdateTimestamp(),
                     ),
                 )
@@ -642,7 +680,7 @@ class RemarksViewModel(
                         editingRepairUpdateId = null,
                         repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                         repairUpdateContentInput = "",
-                        repairUpdatePhotoPath = null,
+                        repairUpdatePhotoPaths = emptyList(),
                         message = if (state.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) {
                             "La réparation est marquée comme terminée."
                         } else if (state.editingRepairUpdateId != null) {
@@ -754,7 +792,7 @@ class RemarksViewModel(
                                 id = update.id,
                                 remarkId = update.remarkId,
                                 content = update.content,
-                                photoPath = update.photoPath,
+                                photoPaths = decodeRemarkPhotoPaths(update.photoPath),
                                 createdAt = update.createdAt,
                             )
                         }

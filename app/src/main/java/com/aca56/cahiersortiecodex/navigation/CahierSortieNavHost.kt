@@ -12,6 +12,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.feature.boats.presentation.BoatDetailRoute
 import com.aca56.cahiersortiecodex.feature.boats.presentation.BoatsRoute
+import com.aca56.cahiersortiecodex.feature.crews.presentation.CrewsRoute
 import com.aca56.cahiersortiecodex.feature.history.presentation.HistoryDetailRoute
 import com.aca56.cahiersortiecodex.feature.history.presentation.HistoryRoute
 import com.aca56.cahiersortiecodex.feature.history.presentation.HistoryViewModel
@@ -141,6 +142,17 @@ fun CahierSortieNavHost(navController: NavHostController) {
                         }
                     },
                 )
+            }
+            composable(AppDestination.Crews.route) {
+                if (appContainer.appPreferencesStore.currentPreferences().crewsEnabled) {
+                    CrewsRoute(
+                        contentPadding = innerPadding,
+                    )
+                } else {
+                    LaunchedEffect(Unit) {
+                        navController.navigateUp()
+                    }
+                }
             }
             composable(
                 route = AppDestination.BoatDetail.route,
@@ -320,6 +332,9 @@ fun CahierSortieNavHost(navController: NavHostController) {
                     },
                     onOpenDestinations = {
                         navController.navigate(AppDestination.SettingsDestinations.route) { launchSingleTop = true }
+                    },
+                    onOpenCrews = {
+                        navController.navigate(AppDestination.Crews.route) { launchSingleTop = true }
                     },
                 )
             }
