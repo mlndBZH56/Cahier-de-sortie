@@ -111,7 +111,7 @@ fun SearchableSelectableList(
         onValueChange = trackedOnSearchQueryChanged,
         label = searchLabel,
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
+        type = AppTextFieldType.SEARCH,
     )
 
     if (options.isEmpty()) {
@@ -197,7 +197,7 @@ fun SearchableSingleSelectList(
         onValueChange = trackedOnSearchQueryChanged,
         label = searchLabel,
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
+        type = AppTextFieldType.SEARCH,
     )
 
     if (options.isEmpty()) {

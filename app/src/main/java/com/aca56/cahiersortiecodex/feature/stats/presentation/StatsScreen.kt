@@ -36,7 +36,6 @@ import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.currentStorageDate
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 
 @Composable
 fun StatsRoute(
@@ -166,7 +165,6 @@ private fun StatsFiltersCard(
     onDateToChanged: (String?) -> Unit,
     onQuickPeriodSelected: (StatsQuickPeriod) -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     var showDateFromPicker by remember { mutableStateOf(false) }
     var showDateToPicker by remember { mutableStateOf(false) }
 
@@ -211,18 +209,12 @@ private fun StatsFiltersCard(
                 QuickPeriodButton(
                     label = "Aujourd'hui",
                     isSelected = uiState.selectedQuickPeriod == StatsQuickPeriod.TODAY,
-                    onClick = {
-                        dismissKeyboard()
-                        onQuickPeriodSelected(StatsQuickPeriod.TODAY)
-                    },
+                    onClick = { onQuickPeriodSelected(StatsQuickPeriod.TODAY) },
                 )
                 QuickPeriodButton(
                     label = "Cette semaine",
                     isSelected = uiState.selectedQuickPeriod == StatsQuickPeriod.THIS_WEEK,
-                    onClick = {
-                        dismissKeyboard()
-                        onQuickPeriodSelected(StatsQuickPeriod.THIS_WEEK)
-                    },
+                    onClick = { onQuickPeriodSelected(StatsQuickPeriod.THIS_WEEK) },
                 )
             }
 
@@ -233,24 +225,17 @@ private fun StatsFiltersCard(
                 QuickPeriodButton(
                     label = "Ce mois",
                     isSelected = uiState.selectedQuickPeriod == StatsQuickPeriod.THIS_MONTH,
-                    onClick = {
-                        dismissKeyboard()
-                        onQuickPeriodSelected(StatsQuickPeriod.THIS_MONTH)
-                    },
+                    onClick = { onQuickPeriodSelected(StatsQuickPeriod.THIS_MONTH) },
                 )
                 QuickPeriodButton(
                     label = "Période personnalisée",
                     isSelected = uiState.selectedQuickPeriod == StatsQuickPeriod.CUSTOM,
-                    onClick = {
-                        dismissKeyboard()
-                        onQuickPeriodSelected(StatsQuickPeriod.CUSTOM)
-                    },
+                    onClick = { onQuickPeriodSelected(StatsQuickPeriod.CUSTOM) },
                 )
             }
 
             AppSelectorFieldButton(
                 onClick = {
-                    dismissKeyboard()
                     showDateFromPicker = true
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -266,7 +251,6 @@ private fun StatsFiltersCard(
 
             AppSelectorFieldButton(
                 onClick = {
-                    dismissKeyboard()
                     showDateToPicker = true
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -283,7 +267,6 @@ private fun StatsFiltersCard(
             if (uiState.dateFrom != null || uiState.dateTo != null) {
                 OutlinedButton(
                     onClick = {
-                        dismissKeyboard()
                         onQuickPeriodSelected(StatsQuickPeriod.CUSTOM)
                         onDateFromChanged(null)
                         onDateToChanged(null)

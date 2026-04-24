@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
@@ -50,8 +52,6 @@ import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
-import com.aca56.cahiersortiecodex.ui.components.rememberDoneKeyboardActions
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
 
 @Composable
@@ -119,8 +119,11 @@ fun BoatsScreen(
                     onValueChange = trackedOnSearchChanged,
                     label = { Text("Rechercher un bateau") },
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                    ),
                     singleLine = true,
-                    keyboardActions = rememberDoneKeyboardActions(),
+                    maxLines = 1,
                 )
             }
         }
@@ -282,7 +285,6 @@ fun BoatDetailScreen(
     onAddBoatRemark: (Long) -> Unit,
     onDismissMessage: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnNameChanged = rememberInteractionAwareValueChange(onNameChanged)
     val trackedOnSeatCountChanged = rememberInteractionAwareValueChange(onSeatCountChanged)
     val trackedOnYearChanged = rememberInteractionAwareValueChange(onYearChanged)
@@ -328,17 +330,11 @@ fun BoatDetailScreen(
                     }
                     if (uiState.isEditMode) {
                         OutlinedButton(
-                            onClick = {
-                                dismissKeyboard()
-                                onCancelEditing()
-                            },
+                            onClick = onCancelEditing,
                         ) { Text("Annuler") }
                     } else {
                         Button(
-                            onClick = {
-                                dismissKeyboard()
-                                onStartEditing()
-                            },
+                            onClick = onStartEditing,
                         ) { Text("Modifier le bateau") }
                     }
                 }
@@ -355,14 +351,11 @@ fun BoatDetailScreen(
                         label = "Nombre de places",
                     )
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        AppBoatSelectorButton(
-                            label = "Type",
-                            value = uiState.boat.type.ifBlank { "Choisir un type" },
-                            onClick = {
-                                dismissKeyboard()
-                                typeMenuExpanded = true
-                            },
-                        )
+                            AppBoatSelectorButton(
+                                label = "Type",
+                                value = uiState.boat.type.ifBlank { "Choisir un type" },
+                                onClick = { typeMenuExpanded = true },
+                            )
                         DropdownMenu(
                             expanded = typeMenuExpanded,
                             onDismissRequest = { typeMenuExpanded = false },
@@ -401,14 +394,10 @@ fun BoatDetailScreen(
                         value = uiState.boat.notes,
                         onValueChange = trackedOnNotesChanged,
                         label = "Notes",
-                        minLines = 3,
                     )
 
                     Button(
-                        onClick = {
-                            dismissKeyboard()
-                            onSaveBoat()
-                        },
+                        onClick = onSaveBoat,
                         enabled = uiState.canSave && !uiState.isSaving,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -461,10 +450,7 @@ fun BoatDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(
-                        onClick = {
-                            dismissKeyboard()
-                            onAddBoatRemark(uiState.boat.id)
-                        },
+                        onClick = { onAddBoatRemark(uiState.boat.id) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Ajouter une remarque")
@@ -513,19 +499,13 @@ fun BoatDetailScreen(
                         }
                     }
                     Button(
-                        onClick = {
-                            dismissKeyboard()
-                            onAddBoatRemark(uiState.boat.id)
-                        },
+                        onClick = { onAddBoatRemark(uiState.boat.id) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Ajouter une remarque")
                     }
                     OutlinedButton(
-                        onClick = {
-                            dismissKeyboard()
-                            onOpenBoatRemarks(uiState.boat.id)
-                        },
+                        onClick = { onOpenBoatRemarks(uiState.boat.id) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Voir toutes les remarques")
@@ -544,10 +524,7 @@ fun BoatDetailScreen(
                     )
                 } else {
                     Button(
-                        onClick = {
-                            dismissKeyboard()
-                            onAddPhoto()
-                        },
+                        onClick = onAddPhoto,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Ajouter une photo")
@@ -577,10 +554,7 @@ fun BoatDetailScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     OutlinedButton(
-                                        onClick = {
-                                            dismissKeyboard()
-                                            onDeletePhoto(photo.id)
-                                        },
+                                        onClick = { onDeletePhoto(photo.id) },
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
                                         Text("Supprimer la photo")
@@ -634,10 +608,7 @@ fun BoatDetailScreen(
                     }
 
                     OutlinedButton(
-                        onClick = {
-                            dismissKeyboard()
-                            onOpenFullHistory(uiState.boat.id)
-                        },
+                        onClick = { onOpenFullHistory(uiState.boat.id) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Voir l'historique complet")
@@ -694,16 +665,17 @@ private fun AppBoatTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    minLines: Int = 1,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
-        keyboardActions = rememberDoneKeyboardActions(),
-        singleLine = minLines == 1,
-        minLines = minLines,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Text,
+        ),
+        singleLine = true,
+        maxLines = 1,
     )
 }
 

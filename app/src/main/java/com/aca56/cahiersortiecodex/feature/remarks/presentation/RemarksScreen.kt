@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
@@ -49,7 +51,6 @@ import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.currentStorageDate
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 
 @Composable
 fun RemarksRoute(
@@ -131,13 +132,11 @@ fun RemarksScreen(
     var remarkPendingDeleteKey by remember { mutableStateOf<String?>(null) }
     var filterBoatSearchQuery by remember { mutableStateOf("") }
     var editorBoatSearchQuery by remember { mutableStateOf("") }
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val editingRemark = uiState.editingRemark
 
     remarkPendingDeleteKey?.let { remarkKey ->
         DeleteConfirmationDialog(
             onConfirm = {
-                dismissKeyboard()
                 onDeleteRemark(remarkKey)
                 remarkPendingDeleteKey = null
             },
@@ -208,7 +207,6 @@ fun RemarksScreen(
                         emptyLabel = "Aucun bateau disponible.",
                         noResultsLabel = "Aucun bateau ne correspond à la recherche.",
                         onOptionSelected = { selectedKey ->
-                            dismissKeyboard()
                             onBoatFilterSelected(selectedKey.toLongOrNull())
                         },
                     )
@@ -216,7 +214,6 @@ fun RemarksScreen(
                     if (uiState.selectedBoatId != null) {
                         OutlinedButton(
                             onClick = {
-                                dismissKeyboard()
                                 onBoatFilterSelected(null)
                                 filterBoatSearchQuery = ""
                             },
@@ -232,7 +229,6 @@ fun RemarksScreen(
                     ) {
                         AppSelectorFieldButton(
                             onClick = {
-                                dismissKeyboard()
                                 showFilterDatePicker = true
                             },
                             modifier = Modifier.weight(1f),
@@ -243,10 +239,7 @@ fun RemarksScreen(
                             )
                         }
                         OutlinedButton(
-                            onClick = {
-                                dismissKeyboard()
-                                onDateFilterSelected(null)
-                            },
+                            onClick = { onDateFilterSelected(null) },
                             modifier = Modifier.weight(1f),
                         ) {
                             Text("Effacer la date")
@@ -257,12 +250,7 @@ fun RemarksScreen(
 
             Button(
                 onClick = {
-                    dismissKeyboard()
-                    if (uiState.isEditorVisible && !uiState.isEditing) {
-                        onCancelEditing()
-                    } else {
-                        onStartAddingRemark()
-                    }
+                    if (uiState.isEditorVisible && !uiState.isEditing) onCancelEditing() else onStartAddingRemark()
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -281,37 +269,18 @@ fun RemarksScreen(
                     editingRemark = editingRemark,
                     editorBoatSearchQuery = editorBoatSearchQuery,
                     onEditorBoatSearchQueryChanged = { editorBoatSearchQuery = it },
-                    onEditorDateClick = {
-                        dismissKeyboard()
-                        showEditorDatePicker = true
-                    },
+                    onEditorDateClick = { showEditorDatePicker = true },
                     onEditorStatusChanged = onEditorStatusChanged,
                     onEditorContentChanged = onEditorContentChanged,
-                    onBoatForEditorSelected = { boatId ->
-                        dismissKeyboard()
-                        onBoatForEditorSelected(boatId)
-                    },
-                    onAddPhoto = {
-                        dismissKeyboard()
-                        onAddPhoto()
-                    },
-                    onRemovePhoto = {
-                        dismissKeyboard()
-                        onRemovePhoto()
-                    },
+                    onBoatForEditorSelected = onBoatForEditorSelected,
+                    onAddPhoto = onAddPhoto,
+                    onRemovePhoto = onRemovePhoto,
                     onClearEditorBoat = {
-                        dismissKeyboard()
                         onBoatForEditorSelected(null)
                         editorBoatSearchQuery = ""
                     },
-                    onCancelEditing = {
-                        dismissKeyboard()
-                        onCancelEditing()
-                    },
-                    onSaveRemark = {
-                        dismissKeyboard()
-                        onSaveRemark()
-                    },
+                    onCancelEditing = onCancelEditing,
+                    onSaveRemark = onSaveRemark,
                 )
             }
 
@@ -401,19 +370,13 @@ fun RemarksScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 OutlinedButton(
-                                    onClick = {
-                                        dismissKeyboard()
-                                        onEditRemark(remark.key)
-                                    },
+                                    onClick = { onEditRemark(remark.key) },
                                     modifier = Modifier.weight(1f),
                                 ) {
                                     Text("Modifier")
                                 }
                                 OutlinedButton(
-                                    onClick = {
-                                        dismissKeyboard()
-                                        remarkPendingDeleteKey = remark.key
-                                    },
+                                    onClick = { remarkPendingDeleteKey = remark.key },
                                     modifier = Modifier.weight(1f),
                                 ) {
                                     Text("Supprimer")
@@ -426,19 +389,13 @@ fun RemarksScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     OutlinedButton(
-                                        onClick = {
-                                            dismissKeyboard()
-                                            onStartRepairUpdate(remark.key)
-                                        },
+                                        onClick = { onStartRepairUpdate(remark.key) },
                                         modifier = Modifier.weight(1f),
                                     ) {
                                         Text("Ajouter un suivi")
                                     }
                                     Button(
-                                        onClick = {
-                                            dismissKeyboard()
-                                            onStartRepairClosure(remark.key)
-                                        },
+                                        onClick = { onStartRepairClosure(remark.key) },
                                         modifier = Modifier.weight(1f),
                                     ) {
                                         Text("Marquer comme réparé")
@@ -453,22 +410,10 @@ fun RemarksScreen(
                                     photoPath = uiState.repairUpdatePhotoPath,
                                     isSaving = uiState.isSaving,
                                     onContentChanged = onRepairUpdateContentChanged,
-                                    onAddPhoto = {
-                                        dismissKeyboard()
-                                        onAddPhoto()
-                                    },
-                                    onRemovePhoto = {
-                                        dismissKeyboard()
-                                        onRemovePhoto()
-                                    },
-                                    onCancel = {
-                                        dismissKeyboard()
-                                        onCancelRepairUpdate()
-                                    },
-                                    onSave = {
-                                        dismissKeyboard()
-                                        onSaveRepairUpdate()
-                                    },
+                                    onAddPhoto = onAddPhoto,
+                                    onRemovePhoto = onRemovePhoto,
+                                    onCancel = onCancelRepairUpdate,
+                                    onSave = onSaveRepairUpdate,
                                 )
                             }
 
@@ -478,37 +423,18 @@ fun RemarksScreen(
                                     editingRemark = editingRemark,
                                     editorBoatSearchQuery = editorBoatSearchQuery,
                                     onEditorBoatSearchQueryChanged = { editorBoatSearchQuery = it },
-                                    onEditorDateClick = {
-                                        dismissKeyboard()
-                                        showEditorDatePicker = true
-                                    },
+                                    onEditorDateClick = { showEditorDatePicker = true },
                                     onEditorContentChanged = onEditorContentChanged,
                                     onEditorStatusChanged = onEditorStatusChanged,
-                                    onBoatForEditorSelected = { boatId ->
-                                        dismissKeyboard()
-                                        onBoatForEditorSelected(boatId)
-                                    },
-                                    onAddPhoto = {
-                                        dismissKeyboard()
-                                        onAddPhoto()
-                                    },
-                                    onRemovePhoto = {
-                                        dismissKeyboard()
-                                        onRemovePhoto()
-                                    },
+                                    onBoatForEditorSelected = onBoatForEditorSelected,
+                                    onAddPhoto = onAddPhoto,
+                                    onRemovePhoto = onRemovePhoto,
                                     onClearEditorBoat = {
-                                        dismissKeyboard()
                                         onBoatForEditorSelected(null)
                                         editorBoatSearchQuery = ""
                                     },
-                                    onCancelEditing = {
-                                        dismissKeyboard()
-                                        onCancelEditing()
-                                    },
-                                    onSaveRemark = {
-                                        dismissKeyboard()
-                                        onSaveRemark()
-                                    },
+                                    onCancelEditing = onCancelEditing,
+                                    onSaveRemark = onSaveRemark,
                                 )
                             }
                         }
@@ -619,7 +545,9 @@ private fun RemarkEditorCard(
                 onValueChange = trackedOnEditorContentChanged,
                 label = { Text("Contenu") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                ),
             )
 
             if (editingRemark?.source != RemarkSource.SESSION) {
@@ -813,7 +741,9 @@ private fun RepairUpdateEditorCard(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                ),
             )
             photoPath?.let { path ->
                 RemarkPhotoPreview(photoPath = path)
