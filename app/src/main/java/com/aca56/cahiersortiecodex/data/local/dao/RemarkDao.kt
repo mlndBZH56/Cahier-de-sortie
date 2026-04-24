@@ -17,6 +17,9 @@ interface RemarkDao {
     @Query("SELECT * FROM remarks WHERE boatId = :boatId ORDER BY date DESC")
     fun observeByBoatId(boatId: Long): Flow<List<RemarkEntity>>
 
+    @Query("SELECT * FROM remarks WHERE sessionId = :sessionId LIMIT 1")
+    suspend fun getBySessionId(sessionId: Long): RemarkEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(remark: RemarkEntity): Long
 

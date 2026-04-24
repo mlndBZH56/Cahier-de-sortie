@@ -20,13 +20,20 @@ enum class RemarkStatus {
             childColumns = ["boatId"],
             onDelete = ForeignKey.SET_NULL,
         ),
+        ForeignKey(
+            entity = SessionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sessionId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
     ],
-    indices = [Index(value = ["boatId"])],
+    indices = [Index(value = ["boatId"]), Index(value = ["sessionId"])],
 )
 data class RemarkEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val boatId: Long?,
+    val sessionId: Long? = null,
     val content: String,
     val date: String,
     val status: RemarkStatus = RemarkStatus.NORMAL,

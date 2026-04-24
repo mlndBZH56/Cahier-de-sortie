@@ -12,6 +12,8 @@ class DefaultRemarkRepository(
 
     override fun observeRemarksByBoat(boatId: Long): Flow<List<RemarkEntity>> = remarkDao.observeByBoatId(boatId)
 
+    override suspend fun getRemarkBySessionId(sessionId: Long): RemarkEntity? = remarkDao.getBySessionId(sessionId)
+
     override suspend fun saveRemark(remark: RemarkEntity): Long = remarkDao.insert(remark)
 
     override suspend fun updateRemark(remark: RemarkEntity) {

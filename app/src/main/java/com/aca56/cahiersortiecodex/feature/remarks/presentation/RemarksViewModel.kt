@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
+import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
+import com.aca56.cahiersortiecodex.data.local.entity.encodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
@@ -40,13 +42,13 @@ data class RemarkItemUi(
     val boatId: Long?,
     val boatName: String,
     val status: RemarkStatus,
-    val photoPath: String?,
+    val photoPaths: List<String>,
     val sessionId: Long? = null,
 ) {
     val key: String = "${source.name.lowercase()}-$id"
     val sourceLabel: String
         get() = when (source) {
-            RemarkSource.STANDALONE -> "Remarque indépendante"
+            RemarkSource.STANDALONE -> if (sessionId != null) "Remarque liée à une session" else "Remarque indépendante"
             RemarkSource.SESSION -> "Remarque de session"
         }
 }
@@ -76,9 +78,10 @@ data class RemarksUiState(
     val editorDateInput: String = defaultRemarkDate(),
     val editorContentInput: String = "",
     val editorStatus: RemarkStatus = RemarkStatus.NORMAL,
-    val editorPhotoPath: String? = null,
+    val editorPhotoPaths: List<String> = emptyList(),
     val selectedBoatForEditorId: Long? = null,
     val repairUpdateRemarkKey: String? = null,
+    val editingRepairUpdateId: Long? = null,
     val repairUpdateMode: RepairUpdateMode = RepairUpdateMode.FOLLOW_UP,
     val repairUpdateContentInput: String = "",
     val repairUpdatePhotoPath: String? = null,
@@ -165,9 +168,10 @@ class RemarksViewModel(
                 editorDateInput = defaultRemarkDate(),
                 editorContentInput = "",
                 editorStatus = RemarkStatus.NORMAL,
-                editorPhotoPath = null,
+                editorPhotoPaths = emptyList(),
                 selectedBoatForEditorId = initialBoatId,
                 repairUpdateRemarkKey = null,
+                editingRepairUpdateId = null,
                 repairUpdateContentInput = "",
                 repairUpdatePhotoPath = null,
                 message = null,
@@ -184,9 +188,10 @@ class RemarksViewModel(
                 editorDateInput = defaultRemarkDate(),
                 editorContentInput = "",
                 editorStatus = RemarkStatus.NORMAL,
-                editorPhotoPath = null,
+                editorPhotoPaths = emptyList(),
                 selectedBoatForEditorId = null,
                 repairUpdateRemarkKey = null,
+                editingRepairUpdateId = null,
                 repairUpdateContentInput = "",
                 repairUpdatePhotoPath = null,
                 message = null,
@@ -213,9 +218,10 @@ class RemarksViewModel(
                 editorDateInput = remark.date,
                 editorContentInput = remark.content,
                 editorStatus = remark.status,
-                editorPhotoPath = remark.photoPath,
+                editorPhotoPaths = remark.photoPaths,
                 selectedBoatForEditorId = remark.boatId,
                 repairUpdateRemarkKey = null,
+                editingRepairUpdateId = null,
                 repairUpdateContentInput = "",
                 repairUpdatePhotoPath = null,
                 message = null,
@@ -256,6 +262,7 @@ class RemarksViewModel(
                 repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                 repairUpdateContentInput = "",
                 repairUpdatePhotoPath = null,
+                editingRepairUpdateId = null,
                 isEditorVisible = false,
                 editingRemarkKey = null,
                 message = null,
@@ -272,6 +279,7 @@ class RemarksViewModel(
                 repairUpdateMode = RepairUpdateMode.CLOSE_REPAIR,
                 repairUpdateContentInput = "",
                 repairUpdatePhotoPath = null,
+                editingRepairUpdateId = null,
                 isEditorVisible = false,
                 editingRemarkKey = null,
                 message = null,
@@ -284,6 +292,7 @@ class RemarksViewModel(
         uiStateMutable.update {
             it.copy(
                 repairUpdateRemarkKey = null,
+                editingRepairUpdateId = null,
                 repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                 repairUpdateContentInput = "",
                 repairUpdatePhotoPath = null,
@@ -315,7 +324,7 @@ class RemarksViewModel(
                         )
                     } else {
                         it.copy(
-                            editorPhotoPath = filePath,
+                            editorPhotoPaths = (it.editorPhotoPaths + filePath).distinct(),
                             message = null,
                             messageType = null,
                         )
@@ -332,19 +341,77 @@ class RemarksViewModel(
         }
     }
 
-    fun removePhoto() {
+    fun removePhoto(path: String? = null) {
         val currentState = uiState.value
         val filePath = if (currentState.repairUpdateRemarkKey != null) {
             currentState.repairUpdatePhotoPath
         } else {
-            currentState.editorPhotoPath
+            path
         }
         filePath?.let(boatPhotoStorage::deletePhoto)
         uiStateMutable.update {
             if (it.repairUpdateRemarkKey != null) {
                 it.copy(repairUpdatePhotoPath = null, message = null, messageType = null)
             } else {
-                it.copy(editorPhotoPath = null, message = null, messageType = null)
+                it.copy(
+                    editorPhotoPaths = filePath?.let { photo -> it.editorPhotoPaths - photo } ?: it.editorPhotoPaths,
+                    message = null,
+                    messageType = null,
+                )
+            }
+        }
+    }
+
+    fun startEditingRepairUpdate(updateId: Long) {
+        val update = uiState.value.repairUpdatesByRemarkId.values.flatten().firstOrNull { it.id == updateId } ?: return
+        val ownerRemark = uiState.value.remarks.firstOrNull { it.id == update.remarkId } ?: return
+        uiStateMutable.update {
+            it.copy(
+                repairUpdateRemarkKey = ownerRemark.key,
+                editingRepairUpdateId = update.id,
+                repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
+                repairUpdateContentInput = update.content,
+                repairUpdatePhotoPath = update.photoPath,
+                isEditorVisible = false,
+                editingRemarkKey = null,
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun deleteRepairUpdate(updateId: Long) {
+        val update = uiState.value.repairUpdatesByRemarkId.values.flatten().firstOrNull { it.id == updateId } ?: return
+        viewModelScope.launch {
+            runCatching {
+                update.photoPath?.let(boatPhotoStorage::deletePhoto)
+                repairUpdateRepository.deleteUpdate(
+                    RepairUpdateEntity(
+                        id = update.id,
+                        remarkId = update.remarkId,
+                        content = update.content,
+                        photoPath = update.photoPath,
+                        createdAt = update.createdAt,
+                    ),
+                )
+            }.onSuccess {
+                uiStateMutable.update {
+                    it.copy(
+                        message = "Le suivi a été supprimé.",
+                        messageType = FeedbackDialogType.SUCCESS,
+                        editingRepairUpdateId = if (it.editingRepairUpdateId == updateId) null else it.editingRepairUpdateId,
+                        repairUpdateRemarkKey = if (it.editingRepairUpdateId == updateId) null else it.repairUpdateRemarkKey,
+                        repairUpdateContentInput = if (it.editingRepairUpdateId == updateId) "" else it.repairUpdateContentInput,
+                        repairUpdatePhotoPath = if (it.editingRepairUpdateId == updateId) null else it.repairUpdatePhotoPath,
+                    )
+                }
+            }.onFailure {
+                uiStateMutable.update {
+                    it.copy(
+                        message = "Le suivi de réparation n'a pas pu être supprimé.",
+                        messageType = FeedbackDialogType.ERROR,
+                    )
+                }
             }
         }
     }
@@ -394,10 +461,11 @@ class RemarksViewModel(
                             RemarkEntity(
                                 id = editingRemark.id,
                                 boatId = state.selectedBoatForEditorId,
+                                sessionId = editingRemark.sessionId,
                                 content = content,
                                 date = state.editorDateInput,
                                 status = state.editorStatus,
-                                photoPath = state.editorPhotoPath,
+                                photoPath = encodeRemarkPhotoPaths(state.editorPhotoPaths),
                             ),
                         )
                     }
@@ -409,7 +477,7 @@ class RemarksViewModel(
                                 content = content,
                                 date = state.editorDateInput,
                                 status = state.editorStatus,
-                                photoPath = state.editorPhotoPath,
+                                photoPath = encodeRemarkPhotoPaths(state.editorPhotoPaths),
                             ),
                         )
                     }
@@ -423,7 +491,7 @@ class RemarksViewModel(
                         editorDateInput = defaultRemarkDate(),
                         editorContentInput = "",
                         editorStatus = RemarkStatus.NORMAL,
-                        editorPhotoPath = null,
+                        editorPhotoPaths = emptyList(),
                         selectedBoatForEditorId = null,
                         message = if (editingRemark == null) "Remarque ajoutée." else "Remarque mise à jour.",
                         messageType = FeedbackDialogType.SUCCESS,
@@ -460,17 +528,18 @@ class RemarksViewModel(
             runCatching {
                 when (remark.source) {
                     RemarkSource.STANDALONE -> {
-                        remark.photoPath?.let(boatPhotoStorage::deletePhoto)
+                        remark.photoPaths.forEach(boatPhotoStorage::deletePhoto)
                         uiState.value.repairUpdatesByRemarkId[remark.id].orEmpty()
                             .forEach { update -> update.photoPath?.let(boatPhotoStorage::deletePhoto) }
                         remarkRepository.deleteRemark(
                             RemarkEntity(
                                 id = remark.id,
                                 boatId = remark.boatId,
+                                sessionId = remark.sessionId,
                                 content = remark.content,
                                 date = remark.date,
                                 status = remark.status,
-                                photoPath = remark.photoPath,
+                                photoPath = encodeRemarkPhotoPaths(remark.photoPaths),
                             ),
                         )
                     }
@@ -492,9 +561,10 @@ class RemarksViewModel(
                         editorDateInput = if (resetEditor) defaultRemarkDate() else it.editorDateInput,
                         editorContentInput = if (resetEditor) "" else it.editorContentInput,
                         editorStatus = if (resetEditor) RemarkStatus.NORMAL else it.editorStatus,
-                        editorPhotoPath = if (resetEditor) null else it.editorPhotoPath,
+                        editorPhotoPaths = if (resetEditor) emptyList() else it.editorPhotoPaths,
                         selectedBoatForEditorId = if (resetEditor) null else it.selectedBoatForEditorId,
                         repairUpdateRemarkKey = if (it.repairUpdateRemarkKey == remark.key) null else it.repairUpdateRemarkKey,
+                        editingRepairUpdateId = if (it.repairUpdateRemarkKey == remark.key) null else it.editingRepairUpdateId,
                         repairUpdateMode = if (it.repairUpdateRemarkKey == remark.key) RepairUpdateMode.FOLLOW_UP else it.repairUpdateMode,
                         repairUpdateContentInput = if (it.repairUpdateRemarkKey == remark.key) "" else it.repairUpdateContentInput,
                         repairUpdatePhotoPath = if (it.repairUpdateRemarkKey == remark.key) null else it.repairUpdatePhotoPath,
@@ -538,6 +608,7 @@ class RemarksViewModel(
             runCatching {
                 repairUpdateRepository.saveUpdate(
                     RepairUpdateEntity(
+                        id = state.editingRepairUpdateId ?: 0,
                         remarkId = activeRemark.id,
                         content = content.ifBlank {
                             if (state.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) {
@@ -555,10 +626,11 @@ class RemarksViewModel(
                         RemarkEntity(
                             id = activeRemark.id,
                             boatId = activeRemark.boatId,
+                            sessionId = activeRemark.sessionId,
                             content = activeRemark.content,
                             date = activeRemark.date,
                             status = RemarkStatus.REPAIRED,
-                            photoPath = activeRemark.photoPath,
+                            photoPath = encodeRemarkPhotoPaths(activeRemark.photoPaths),
                         ),
                     )
                 }
@@ -567,11 +639,14 @@ class RemarksViewModel(
                     it.copy(
                         isSaving = false,
                         repairUpdateRemarkKey = null,
+                        editingRepairUpdateId = null,
                         repairUpdateMode = RepairUpdateMode.FOLLOW_UP,
                         repairUpdateContentInput = "",
                         repairUpdatePhotoPath = null,
                         message = if (state.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) {
                             "La réparation est marquée comme terminée."
+                        } else if (state.editingRepairUpdateId != null) {
+                            "Le suivi a été modifié."
                         } else {
                             "Le suivi a été ajouté."
                         },
@@ -634,13 +709,16 @@ class RemarksViewModel(
                         boatId = remark.boatId,
                         boatName = boatNames[remark.boatId]?.name.orEmpty(),
                         status = remark.status,
-                        photoPath = remark.photoPath,
+                        photoPaths = decodeRemarkPhotoPaths(remark.photoPath),
+                        sessionId = remark.sessionId,
                     )
                 }
 
+                val linkedSessionIds = standaloneRemarks.mapNotNull { it.sessionId }.toSet()
+
                 val sessionItems = sessions.mapNotNull { sessionWithDetails ->
                     val remarks = sessionWithDetails.session.remarks?.trim().orEmpty()
-                    if (remarks.isBlank()) {
+                    if (remarks.isBlank() || linkedSessionIds.contains(sessionWithDetails.session.id)) {
                         null
                     } else {
                         RemarkItemUi(
@@ -651,7 +729,7 @@ class RemarksViewModel(
                             boatId = sessionWithDetails.boat.id,
                             boatName = sessionWithDetails.boat.name,
                             status = RemarkStatus.NORMAL,
-                            photoPath = null,
+                            photoPaths = emptyList(),
                             sessionId = sessionWithDetails.session.id,
                         )
                     }
@@ -714,7 +792,7 @@ class RemarksViewModel(
                         },
                         editorContentInput = updatedEditingRemark?.content ?: state.editorContentInput,
                         editorStatus = updatedEditingRemark?.status ?: state.editorStatus,
-                        editorPhotoPath = updatedEditingRemark?.photoPath ?: state.editorPhotoPath,
+                        editorPhotoPaths = updatedEditingRemark?.photoPaths ?: state.editorPhotoPaths,
                         repairUpdateRemarkKey = state.repairUpdateRemarkKey?.takeIf { key ->
                             remarks.any { item -> item.key == key }
                         },

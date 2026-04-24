@@ -8,11 +8,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 
 enum class AppTextFieldType {
     SEARCH,
     SIMPLE,
     NUMERIC,
+    PIN,
     LONG_TEXT,
 }
 
@@ -28,15 +31,27 @@ fun AppTextField(
         AppTextFieldType.SEARCH -> KeyboardOptions(keyboardType = KeyboardType.Text)
         AppTextFieldType.SIMPLE -> KeyboardOptions(keyboardType = KeyboardType.Text)
         AppTextFieldType.NUMERIC -> KeyboardOptions(keyboardType = KeyboardType.Number)
+        AppTextFieldType.PIN -> KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
         AppTextFieldType.LONG_TEXT -> KeyboardOptions(keyboardType = KeyboardType.Text)
+    }
+
+    val effectiveOnValueChange: (String) -> Unit = if (type == AppTextFieldType.PIN) {
+        { updatedValue -> onValueChange(updatedValue.filter(Char::isDigit)) }
+    } else {
+        onValueChange
     }
 
     OutlinedTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = effectiveOnValueChange,
         label = { Text(label) },
         modifier = modifier,
         keyboardOptions = keyboardOptions,
+        visualTransformation = if (type == AppTextFieldType.PIN) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        },
         singleLine = type != AppTextFieldType.LONG_TEXT,
         maxLines = if (type == AppTextFieldType.LONG_TEXT) Int.MAX_VALUE else 1,
         shape = MaterialTheme.shapes.medium,

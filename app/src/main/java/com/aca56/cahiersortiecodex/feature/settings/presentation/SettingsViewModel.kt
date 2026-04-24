@@ -6,12 +6,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
+import com.aca56.cahiersortiecodex.data.export.DatabaseCsvExporter
 import com.aca56.cahiersortiecodex.data.export.SessionCsvExporter
 import com.aca56.cahiersortiecodex.data.importing.BoatImportParser
 import com.aca56.cahiersortiecodex.data.importing.RowerImportParser
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
+import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
+import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.DestinationRepository
@@ -34,9 +39,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.Date
 
 data class DestinationManagementUi(
     val destinations: List<DestinationEntity> = emptyList(),
@@ -66,6 +76,20 @@ data class BoatManagementUi(
     val isEditing: Boolean
         get() = editingBoatId != null
 }
+
+enum class DataCleanupPeriod(val label: String, val months: Int?) {
+    ONE_MONTH("1 mois", 1),
+    THREE_MONTHS("3 mois", 3),
+    SIX_MONTHS("6 mois", 6),
+    TWELVE_MONTHS("12 mois", 12),
+    CUSTOM("Personnalisé", null),
+}
+
+data class DataCleanupPreview(
+    val sessionsCount: Int,
+    val remarksCount: Int,
+    val cutoffDate: String,
+)
 
 data class SettingsUiState(
     val hasPin: Boolean = false,
@@ -101,6 +125,12 @@ data class SettingsUiState(
     val exportDestinationSearchQuery: String = "",
     val exportDateFrom: String = "",
     val exportDateTo: String = "",
+    val cleanupSessionsEnabled: Boolean = false,
+    val cleanupRemarksEnabled: Boolean = false,
+    val cleanupPeriod: DataCleanupPeriod = DataCleanupPeriod.ONE_MONTH,
+    val cleanupCustomCutoffDate: String = "",
+    val cleanupPreview: DataCleanupPreview? = null,
+    val showRestartAfterRestore: Boolean = false,
 ) {
     val selectedExportBoatLabel: String?
         get() = selectedExportBoatIds.singleOrNull()?.let { selectedBoatId ->
@@ -203,6 +233,9 @@ data class SettingsUiState(
             selectedExportDestinations.isNotEmpty() ||
             exportDateFrom.isNotBlank() ||
             exportDateTo.isNotBlank()
+
+    val hasCleanupSelection: Boolean
+        get() = cleanupSessionsEnabled || cleanupRemarksEnabled
 }
 
 class SettingsViewModel(
@@ -522,7 +555,13 @@ class SettingsViewModel(
                 }
                 application.reloadAppContainer()
             },
-            onSuccessMessage = "La base de données a été restaurée avec succès depuis le fichier ZIP.",
+            onSuccess = {
+                it.copy(
+                    showRestartAfterRestore = true,
+                    message = null,
+                    messageType = null,
+                )
+            },
         )
     }
 
@@ -613,6 +652,60 @@ class SettingsViewModel(
         }
     }
 
+    fun onCleanupSessionsEnabledChanged(value: Boolean) {
+        uiStateMutable.update {
+            it.copy(
+                cleanupSessionsEnabled = value,
+                cleanupPreview = null,
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun onCleanupRemarksEnabledChanged(value: Boolean) {
+        uiStateMutable.update {
+            it.copy(
+                cleanupRemarksEnabled = value,
+                cleanupPreview = null,
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun onCleanupPeriodChanged(value: DataCleanupPeriod) {
+        uiStateMutable.update {
+            it.copy(
+                cleanupPeriod = value,
+                cleanupPreview = null,
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun onCleanupCustomCutoffDateChanged(value: String) {
+        uiStateMutable.update {
+            it.copy(
+                cleanupCustomCutoffDate = value,
+                cleanupPreview = null,
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun dismissCleanupPreview() {
+        uiStateMutable.update {
+            it.copy(
+                cleanupPreview = null,
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
     fun clearExportFilters() {
         uiStateMutable.update {
             it.copy(
@@ -672,6 +765,165 @@ class SettingsViewModel(
             },
             onSuccessMessage = "Les sessions filtrées ont été exportées avec succès.",
         )
+    }
+
+    fun exportFullDatabase(uri: Uri) {
+        launchWork(
+            onErrorMessage = "Impossible d'exporter toute la base de données.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    val currentState = uiState.value
+                    DatabaseCsvExporter.exportFullDatabase(
+                        contentResolver = application.contentResolver,
+                        uri = uri,
+                        sessions = sessionRepository.observeSessionsWithDetails().first(),
+                        rowers = currentState.rowerManagement.rowers,
+                        boats = currentState.boatManagement.boats,
+                        destinations = currentState.destinationManagement.destinations,
+                        remarks = application.appContainer.remarkRepository.observeRemarks().first(),
+                    )
+                }
+            },
+            onSuccessMessage = "Toute la base de données a été exportée avec succès.",
+        )
+    }
+
+    fun exportBoatSheets(uri: Uri) {
+        launchWork(
+            onErrorMessage = "Impossible d'exporter les fiches bateaux.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    val currentState = uiState.value
+                    DatabaseCsvExporter.exportBoatSheets(
+                        contentResolver = application.contentResolver,
+                        uri = uri,
+                        boats = currentState.boatManagement.boats,
+                        remarks = application.appContainer.remarkRepository.observeRemarks().first(),
+                    )
+                }
+            },
+            onSuccessMessage = "Les fiches bateaux ont été exportées avec succès.",
+        )
+    }
+
+    fun previewDataCleanup() {
+        if (!uiState.value.isSuperAdmin) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Cette option n'est pas disponible.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return
+        }
+
+        val state = uiState.value
+        if (!state.hasCleanupSelection) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Sélectionnez au moins un type de données à nettoyer.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return
+        }
+
+        val cutoffDate = resolveCleanupCutoffDate(state) ?: run {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Veuillez choisir une période ou une date personnalisée valide pour le nettoyage.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return
+        }
+
+        launchWork(
+            onErrorMessage = "Impossible de préparer l'aperçu du nettoyage.",
+            block = {
+                val sessions = sessionRepository.observeSessionsWithDetails().first()
+                val remarks = application.appContainer.remarkRepository.observeRemarks().first()
+                val preview = buildCleanupPreview(
+                    state = state,
+                    cutoffDate = cutoffDate,
+                    sessions = sessions,
+                    remarks = remarks,
+                )
+                uiStateMutable.update {
+                    it.copy(
+                        cleanupPreview = preview,
+                        message = null,
+                        messageType = null,
+                    )
+                }
+            },
+            onSuccess = { it.copy(message = null, messageType = null) },
+        )
+    }
+
+    fun performDataCleanup(superAdminPin: String): Boolean {
+        val state = uiState.value
+        if (!state.isSuperAdmin) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Cette option n'est pas disponible.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return false
+        }
+
+        val preview = state.cleanupPreview
+        if (preview == null) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Préparez d'abord un aperçu du nettoyage.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return false
+        }
+
+        val normalizedPin = superAdminPin.trim()
+        if (normalizedPin.isBlank()) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Veuillez saisir le code PIN super administrateur pour confirmer.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return false
+        }
+
+        if (!pinCodeStore.verifySuperAdminPin(normalizedPin)) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Le code PIN super administrateur est incorrect.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return false
+        }
+
+        launchWork(
+            onErrorMessage = "Le nettoyage des données a échoué.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    executeDataCleanup(preview.cutoffDate)
+                }
+            },
+            onSuccess = {
+                it.copy(
+                    cleanupPreview = null,
+                    message = buildString {
+                        append("Nettoyage terminé : ")
+                        append("${preview.sessionsCount} sortie(s) et ${preview.remarksCount} remarque(s) supprimées.")
+                    },
+                    messageType = FeedbackDialogType.SUCCESS,
+                )
+            },
+        )
+        return true
     }
 
     fun importRowers(uri: Uri) {
@@ -932,6 +1184,10 @@ class SettingsViewModel(
 
     fun clearMessage() {
         uiStateMutable.update { it.copy(message = null, messageType = null) }
+    }
+
+    fun dismissRestartAfterRestore() {
+        uiStateMutable.update { it.copy(showRestartAfterRestore = false) }
     }
 
     fun onRowerFirstNameChanged(value: String) {
@@ -1403,6 +1659,109 @@ class SettingsViewModel(
         )
     }
 
+    private fun resolveCleanupCutoffDate(state: SettingsUiState): String? {
+        return when (state.cleanupPeriod) {
+            DataCleanupPeriod.CUSTOM -> state.cleanupCustomCutoffDate.takeIf { it.isNotBlank() }
+            else -> {
+                val months = state.cleanupPeriod.months ?: return null
+                val calendar = Calendar.getInstance().apply {
+                    add(Calendar.MONTH, -months)
+                }
+                cleanupDateFormatter.format(calendar.time)
+            }
+        }
+    }
+
+    private fun buildCleanupPreview(
+        state: SettingsUiState,
+        cutoffDate: String,
+        sessions: List<SessionWithDetails>,
+        remarks: List<RemarkEntity>,
+    ): DataCleanupPreview {
+        val sessionIdsToDelete = if (state.cleanupSessionsEnabled) {
+            sessions
+                .filter { it.session.status != SessionStatus.ONGOING }
+                .filter { it.session.date < cutoffDate }
+                .map { it.session.id }
+                .toSet()
+        } else {
+            emptySet()
+        }
+
+        val remarksToDelete = if (state.cleanupRemarksEnabled) {
+            remarks.filter { remark ->
+                remark.date < cutoffDate &&
+                    remark.status != RemarkStatus.REPAIR_NEEDED
+            }
+        } else {
+            emptyList()
+        }
+
+        return DataCleanupPreview(
+            sessionsCount = sessionIdsToDelete.size,
+            remarksCount = remarksToDelete.size,
+            cutoffDate = cutoffDate,
+        )
+    }
+
+    private suspend fun executeDataCleanup(cutoffDate: String) {
+        val state = uiState.value
+        val remarksRepository = application.appContainer.remarkRepository
+        val repairUpdateRepository = application.appContainer.repairUpdateRepository
+        val boatPhotoStorage = application.appContainer.boatPhotoStorage
+
+        val sessions = sessionRepository.observeSessionsWithDetails().first()
+        val remarks = remarksRepository.observeRemarks().first()
+        val repairUpdates = repairUpdateRepository.observeUpdates().first()
+
+        val sessionIdsToDelete = if (state.cleanupSessionsEnabled) {
+            sessions
+                .filter { it.session.status != SessionStatus.ONGOING }
+                .filter { it.session.date < cutoffDate }
+                .map { it.session.id }
+                .toSet()
+        } else {
+            emptySet()
+        }
+
+        val remarksToDelete = if (state.cleanupRemarksEnabled) {
+            remarks.filter { remark ->
+                remark.date < cutoffDate &&
+                    remark.status != RemarkStatus.REPAIR_NEEDED
+            }
+        } else {
+            emptyList()
+        }
+        val remarkIdsToDelete = remarksToDelete.map { it.id }.toSet()
+
+        remarks
+            .filter { it.sessionId in sessionIdsToDelete && it.id !in remarkIdsToDelete }
+            .forEach { linkedRemark ->
+                remarksRepository.updateRemark(
+                    linkedRemark.copy(sessionId = null),
+                )
+            }
+
+        repairUpdates
+            .filter { it.remarkId in remarkIdsToDelete }
+            .forEach { update ->
+                update.photoPath?.let(boatPhotoStorage::deletePhoto)
+                repairUpdateRepository.deleteUpdate(update)
+            }
+
+        remarksToDelete.forEach { remark ->
+            decodeRemarkPhotoPaths(remark.photoPath).forEach(boatPhotoStorage::deletePhoto)
+            remarksRepository.deleteRemark(remark)
+        }
+
+        sessions
+            .filter { it.session.id in sessionIdsToDelete }
+            .forEach { session ->
+                sessionRepository.clearSessionRowers(session.session.id)
+                sessionRepository.deleteSession(session.session)
+            }
+    }
+
     private fun normalizePersonKey(firstName: String, lastName: String): String {
         return "${firstName.trim().lowercase()}|${lastName.trim().lowercase()}"
     }
@@ -1574,6 +1933,8 @@ class SettingsViewModel(
         }
     }
 }
+
+private val cleanupDateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
 private fun formatSeconds(durationMillis: Long): String {
     val seconds = durationMillis / 1000.0

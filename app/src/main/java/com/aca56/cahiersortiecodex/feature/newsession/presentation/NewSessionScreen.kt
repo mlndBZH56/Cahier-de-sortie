@@ -1,5 +1,7 @@
 package com.aca56.cahiersortiecodex.feature.newsession.presentation
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +47,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
+import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
@@ -71,9 +74,15 @@ fun NewSessionRoute(
             destinationRepository = appContainer.destinationRepository,
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
+            boatPhotoStorage = appContainer.boatPhotoStorage,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
+    val remarkPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = OpenMultipleDocuments(),
+    ) { uris ->
+        viewModel.addSessionRemarkPhotos(uris)
+    }
 
     NewSessionScreen(
         contentPadding = contentPadding,
@@ -87,6 +96,7 @@ fun NewSessionRoute(
         onEndTimeChanged = viewModel::onEndTimeChanged,
         onKmChanged = viewModel::onKmChanged,
         onRemarksChanged = viewModel::onRemarksChanged,
+        onSessionRemarkStatusChanged = viewModel::onSessionRemarkStatusChanged,
         onDestinationSelected = viewModel::onDestinationSelected,
         onCustomDestinationSelected = viewModel::onCustomDestinationSelected,
         onDestinationChanged = viewModel::onDestinationChanged,
@@ -97,7 +107,9 @@ fun NewSessionRoute(
         onRemoveGuestRower = viewModel::removeGuestRower,
         onToggleQuickMode = viewModel::toggleQuickMode,
         onResetForm = viewModel::resetForm,
-        onApplySuggestedCrewMember = viewModel::applySuggestedCrewMember,
+        onApplySuggestedCrew = viewModel::applySuggestedCrew,
+        onAddSessionRemarkPhotos = { remarkPhotoPickerLauncher.launch(arrayOf("image/*")) },
+        onRemoveSessionRemarkPhoto = viewModel::removeSessionRemarkPhoto,
         onSaveSession = viewModel::saveSession,
         onOpenBoatDetails = onOpenBoatDetails,
         onDismissFeedback = {
@@ -127,10 +139,16 @@ fun EditSessionRoute(
             destinationRepository = appContainer.destinationRepository,
             rowerRepository = appContainer.rowerRepository,
             sessionRepository = appContainer.sessionRepository,
+            boatPhotoStorage = appContainer.boatPhotoStorage,
             sessionId = sessionId,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
+    val remarkPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = OpenMultipleDocuments(),
+    ) { uris ->
+        viewModel.addSessionRemarkPhotos(uris)
+    }
 
     NewSessionScreen(
         contentPadding = contentPadding,
@@ -144,6 +162,7 @@ fun EditSessionRoute(
         onEndTimeChanged = viewModel::onEndTimeChanged,
         onKmChanged = viewModel::onKmChanged,
         onRemarksChanged = viewModel::onRemarksChanged,
+        onSessionRemarkStatusChanged = viewModel::onSessionRemarkStatusChanged,
         onDestinationSelected = viewModel::onDestinationSelected,
         onCustomDestinationSelected = viewModel::onCustomDestinationSelected,
         onDestinationChanged = viewModel::onDestinationChanged,
@@ -154,7 +173,9 @@ fun EditSessionRoute(
         onRemoveGuestRower = viewModel::removeGuestRower,
         onToggleQuickMode = viewModel::toggleQuickMode,
         onResetForm = viewModel::resetForm,
-        onApplySuggestedCrewMember = viewModel::applySuggestedCrewMember,
+        onApplySuggestedCrew = viewModel::applySuggestedCrew,
+        onAddSessionRemarkPhotos = { remarkPhotoPickerLauncher.launch(arrayOf("image/*")) },
+        onRemoveSessionRemarkPhoto = viewModel::removeSessionRemarkPhoto,
         onSaveSession = viewModel::saveSession,
         onOpenBoatDetails = onOpenBoatDetails,
         onDismissFeedback = {
@@ -180,6 +201,7 @@ fun NewSessionScreen(
     onEndTimeChanged: (String) -> Unit,
     onKmChanged: (String) -> Unit,
     onRemarksChanged: (String) -> Unit,
+    onSessionRemarkStatusChanged: (RemarkStatus) -> Unit,
     onDestinationSelected: (Long?) -> Unit,
     onCustomDestinationSelected: () -> Unit,
     onDestinationChanged: (String) -> Unit,
@@ -190,7 +212,9 @@ fun NewSessionScreen(
     onRemoveGuestRower: (Long) -> Unit,
     onToggleQuickMode: () -> Unit,
     onResetForm: () -> Unit,
-    onApplySuggestedCrewMember: (Long) -> Unit,
+    onApplySuggestedCrew: (Set<Long>) -> Unit,
+    onAddSessionRemarkPhotos: () -> Unit,
+    onRemoveSessionRemarkPhoto: (String) -> Unit,
     onSaveSession: () -> Unit,
     onOpenBoatDetails: (Long) -> Unit,
     onDismissFeedback: () -> Unit,
@@ -200,6 +224,7 @@ fun NewSessionScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var boatSearchQuery by remember { mutableStateOf("") }
+    var showRemarkStatusOptions by remember(uiState.sessionRemarkStatus) { mutableStateOf(uiState.sessionRemarkStatus != RemarkStatus.NORMAL) }
     val trackedOnKmChanged = rememberInteractionAwareValueChange(onKmChanged)
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
     val trackedOnDestinationChanged = rememberInteractionAwareValueChange(onDestinationChanged)
@@ -412,7 +437,7 @@ fun NewSessionScreen(
                 if (uiState.suggestedCrew.isNotEmpty()) {
                     CompactSuggestionsSection(
                         suggestions = uiState.suggestedCrew,
-                        onApplySuggestion = onApplySuggestedCrewMember,
+                        onApplySuggestion = onApplySuggestedCrew,
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -549,6 +574,82 @@ fun NewSessionScreen(
                         modifier = Modifier.fillMaxWidth(),
                         type = SessionFieldType.LONG_TEXT,
                     )
+
+                    if (
+                        uiState.remarks.isNotBlank() ||
+                        uiState.sessionRemarkPhotoPaths.isNotEmpty() ||
+                        uiState.sessionRemarkStatus != RemarkStatus.NORMAL
+                    ) {
+                        OutlinedButton(
+                            onClick = { showRemarkStatusOptions = !showRemarkStatusOptions },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                if (uiState.sessionRemarkStatus == RemarkStatus.NORMAL && !showRemarkStatusOptions) {
+                                    "Ajouter un statut"
+                                } else {
+                                    "Statut : ${uiState.sessionRemarkStatus.displayLabel()}"
+                                },
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = onAddSessionRemarkPhotos,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                if (uiState.sessionRemarkPhotoPaths.isEmpty()) {
+                                    "Ajouter des photos"
+                                } else {
+                                    "Ajouter des photos (${uiState.sessionRemarkPhotoPaths.size})"
+                                },
+                            )
+                        }
+
+                        if (uiState.sessionRemarkPhotoPaths.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                uiState.sessionRemarkPhotoPaths.forEachIndexed { index, path ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = "Photo ${index + 1}",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        OutlinedButton(onClick = { onRemoveSessionRemarkPhoto(path) }) {
+                                            Text("Retirer")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showRemarkStatusOptions) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                SessionRemarkStatusButton(
+                                    label = "Remarque normale",
+                                    selected = uiState.sessionRemarkStatus == RemarkStatus.NORMAL,
+                                    onClick = {
+                                        onSessionRemarkStatusChanged(RemarkStatus.NORMAL)
+                                        showRemarkStatusOptions = false
+                                    },
+                                )
+                                SessionRemarkStatusButton(
+                                    label = "Réparation nécessaire",
+                                    selected = uiState.sessionRemarkStatus == RemarkStatus.REPAIR_NEEDED,
+                                    onClick = {
+                                        onSessionRemarkStatusChanged(RemarkStatus.REPAIR_NEEDED)
+                                        showRemarkStatusOptions = true
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -683,53 +784,14 @@ private fun QuickModeInfoCard() {
 }
 
 @Composable
-private fun SuggestedCrewCard(
-    suggestion: SuggestedCrewMemberUi,
-    onApply: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = suggestion.fullName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    text = suggestion.reason,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            OutlinedButton(onClick = onApply) {
-                    Text("Ajouter")
-            }
-        }
-    }
-}
-
-@Composable
 private fun CompactSuggestionsSection(
-    suggestions: List<SuggestedCrewMemberUi>,
-    onApplySuggestion: (Long) -> Unit,
+    suggestions: List<SuggestedCrewPatternUi>,
+    onApplySuggestion: (Set<Long>) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         FormGroupTitle("Suggestions d'équipage")
         Text(
-            text = "Touchez un nom pour l'ajouter rapidement.",
+            text = "Touchez une proposition pour remplir rapidement l'équipage.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -737,7 +799,7 @@ private fun CompactSuggestionsSection(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onApplySuggestion(suggestion.rowerId) },
+                    .clickable { onApplySuggestion(suggestion.rowerIds) },
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
             ) {
@@ -753,12 +815,12 @@ private fun CompactSuggestionsSection(
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = suggestion.fullName,
+                            text = suggestion.rowerNames.joinToString(", "),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = suggestion.reason,
+                            text = "${suggestion.occurrenceCount} sorties similaires",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -871,4 +933,35 @@ private fun SessionSelectionButton(
         modifier = modifier,
         content = content,
     )
+}
+
+@Composable
+private fun RowScope.SessionRemarkStatusButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(label)
+        }
+    }
+}
+
+private fun RemarkStatus.displayLabel(): String {
+    return when (this) {
+        RemarkStatus.NORMAL -> "Remarque normale"
+        RemarkStatus.REPAIR_NEEDED -> "Réparation nécessaire"
+        RemarkStatus.REPAIRED -> "Réparée"
+    }
 }

@@ -1,5 +1,6 @@
 package com.aca56.cahiersortiecodex.feature.settings.presentation
 
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
@@ -43,7 +45,6 @@ import com.aca56.cahiersortiecodex.ui.components.AppTextField
 import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
-import com.aca56.cahiersortiecodex.ui.components.ConfirmationDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
@@ -82,6 +83,16 @@ fun SettingsRoute(
         contract = CreateDocument("text/csv"),
     ) { uri ->
         uri?.let(viewModel::exportFilteredSessions) ?: viewModel.clearMessage()
+    }
+    val fullDatabaseExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("application/zip"),
+    ) { uri ->
+        uri?.let(viewModel::exportFullDatabase) ?: viewModel.clearMessage()
+    }
+    val boatSheetsExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("text/csv"),
+    ) { uri ->
+        uri?.let(viewModel::exportBoatSheets) ?: viewModel.clearMessage()
     }
     val debugReportExportLauncher = rememberLauncherForActivityResult(
         contract = CreateDocument("text/plain"),
@@ -149,6 +160,14 @@ fun SettingsRoute(
             viewModel.clearMessage()
             filteredSessionsExportLauncher.launch(defaultFilteredSessionExportFileName())
         },
+        onExportFullDatabase = {
+            viewModel.clearMessage()
+            fullDatabaseExportLauncher.launch(defaultFullDatabaseExportFileName())
+        },
+        onExportBoatSheets = {
+            viewModel.clearMessage()
+            boatSheetsExportLauncher.launch(defaultBoatSheetsExportFileName())
+        },
         onExportBackup = {
             viewModel.clearMessage()
             backupExportLauncher.launch(defaultBackupFileName())
@@ -164,6 +183,7 @@ fun SettingsRoute(
         onOpenRowers = onOpenRowers,
         onOpenBoats = onOpenBoats,
         onOpenDestinations = onOpenDestinations,
+        onDismissRestartAfterRestore = viewModel::dismissRestartAfterRestore,
         onClearMessage = viewModel::clearMessage,
     )
 }
@@ -223,14 +243,19 @@ fun SettingsScreen(
     onClearExportFilters: () -> Unit,
     onExportAllSessions: () -> Unit,
     onExportFilteredSessions: () -> Unit,
+    onExportFullDatabase: () -> Unit,
+    onExportBoatSheets: () -> Unit,
     onExportBackup: () -> Unit,
     onExportDebugReport: () -> Unit,
     onRestoreBackup: () -> Unit,
     onOpenRowers: () -> Unit,
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
+    onDismissRestartAfterRestore: () -> Unit,
     onClearMessage: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     when {
         !uiState.hasPin -> CreatePinScreen(
             contentPadding = contentPadding,
@@ -296,12 +321,36 @@ fun SettingsScreen(
             onClearExportFilters = onClearExportFilters,
             onExportAllSessions = onExportAllSessions,
             onExportFilteredSessions = onExportFilteredSessions,
+            onExportFullDatabase = onExportFullDatabase,
+            onExportBoatSheets = onExportBoatSheets,
             onExportBackup = onExportBackup,
             onExportDebugReport = onExportDebugReport,
             onRestoreBackup = onRestoreBackup,
             onOpenRowers = onOpenRowers,
             onOpenBoats = onOpenBoats,
             onOpenDestinations = onOpenDestinations,
+            onDismissRestartAfterRestore = onDismissRestartAfterRestore,
+        )
+    }
+
+    if (uiState.showRestartAfterRestore) {
+        AlertDialog(
+            onDismissRequest = { },
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            title = { Text("Redémarrage requis") },
+            text = { Text("Redémarrer l'application pour appliquer les modifications") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDismissRestartAfterRestore()
+                        (context as? Activity)?.finishAffinity()
+                    },
+                ) {
+                    Text("Fermer l'application")
+                }
+            },
         )
     }
 
@@ -335,14 +384,14 @@ private fun CreatePinScreen(
             onValueChange = trackedOnNewPinChanged,
             label = "Nouveau code PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         AppTextField(
             value = uiState.confirmPinInput,
             onValueChange = trackedOnConfirmPinChanged,
             label = "Confirmer le code PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         Button(
             onClick = {
@@ -374,7 +423,7 @@ private fun UnlockSettingsScreen(
             onValueChange = trackedOnPinInputChanged,
             label = "Saisir le code PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         Button(
             onClick = {
@@ -480,27 +529,43 @@ private fun SettingsContent(
     onClearExportFilters: () -> Unit,
     onExportAllSessions: () -> Unit,
     onExportFilteredSessions: () -> Unit,
+    onExportFullDatabase: () -> Unit,
+    onExportBoatSheets: () -> Unit,
     onExportBackup: () -> Unit,
     onExportDebugReport: () -> Unit,
     onRestoreBackup: () -> Unit,
     onOpenRowers: () -> Unit,
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
+    onDismissRestartAfterRestore: () -> Unit,
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showResetPinDialog by remember { mutableStateOf(false) }
     var resetPinInput by remember { mutableStateOf("") }
 
     if (showResetDialog) {
-        ConfirmationDialog(
-            title = "Réinitialiser les données",
-            message = "Voulez-vous vraiment réinitialiser toutes les données de l'application ?",
-            confirmLabel = "Continuer",
-            onDismiss = { showResetDialog = false },
-            onConfirm = {
-                showResetDialog = false
-                resetPinInput = ""
-                showResetPinDialog = true
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            title = { Text("Réinitialiser les données") },
+            text = { Text("Voulez-vous vraiment réinitialiser toutes les données de l'application ?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetDialog = false
+                        resetPinInput = ""
+                        showResetPinDialog = true
+                    },
+                ) {
+                    Text("Continuer")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Annuler")
+                }
             },
         )
     }
@@ -511,6 +576,9 @@ private fun SettingsContent(
                 showResetPinDialog = false
                 resetPinInput = ""
             },
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
+            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
             title = { Text("Confirmation finale") },
             text = {
                 Column(
@@ -522,7 +590,7 @@ private fun SettingsContent(
                         onValueChange = { resetPinInput = it.filter(Char::isDigit) },
                         label = "Code PIN super administrateur",
                         modifier = Modifier.fillMaxWidth(),
-                        type = AppTextFieldType.NUMERIC,
+                        type = AppTextFieldType.PIN,
                     )
                 }
             },
@@ -590,6 +658,7 @@ private fun SettingsContent(
                             )
                             BackupSection(
                                 uiState = uiState,
+                                onExportFullDatabase = onExportFullDatabase,
                                 onExportBackup = onExportBackup,
                                 onRestoreBackup = onRestoreBackup,
                             )
@@ -605,8 +674,8 @@ private fun SettingsContent(
                             )
 
                             SectionHeader(
-                        title = "Export des données",
-                        description = "Exporter les sorties en CSV.",
+                                title = "Export des données",
+                                description = "Exporter les sorties et les fiches bateaux en CSV.",
                             )
                             ImportExportSection(
                                 uiState = uiState,
@@ -618,9 +687,10 @@ private fun SettingsContent(
                                 onExportDestinationSelected = onExportDestinationSelected,
                                 onExportDateFromChanged = onExportDateFromChanged,
                                 onExportDateToChanged = onExportDateToChanged,
-            onClearExportFilters = onClearExportFilters,
-            onExportAllSessions = onExportAllSessions,
+                                onClearExportFilters = onClearExportFilters,
+                                onExportAllSessions = onExportAllSessions,
                                 onExportFilteredSessions = onExportFilteredSessions,
+                                onExportBoatSheets = onExportBoatSheets,
                             )
 
                             SectionHeader(
@@ -686,6 +756,7 @@ private fun SettingsContent(
                     )
                     BackupSection(
                         uiState = uiState,
+                        onExportFullDatabase = onExportFullDatabase,
                         onExportBackup = onExportBackup,
                         onRestoreBackup = onRestoreBackup,
                     )
@@ -702,7 +773,7 @@ private fun SettingsContent(
 
                     SectionHeader(
                         title = "Export des données",
-                        description = "Exporter les sessions au format CSV.",
+                        description = "Exporter les sorties et les fiches bateaux en CSV.",
                     )
                     ImportExportSection(
                         uiState = uiState,
@@ -717,6 +788,7 @@ private fun SettingsContent(
                         onClearExportFilters = onClearExportFilters,
                         onExportAllSessions = onExportAllSessions,
                         onExportFilteredSessions = onExportFilteredSessions,
+                        onExportBoatSheets = onExportBoatSheets,
                     )
 
                     SectionHeader(
@@ -1301,7 +1373,7 @@ private fun SecuritySection(
                 onValueChange = trackedOnCurrentPinChanged,
                 label = "PIN actuel",
                 modifier = Modifier.fillMaxWidth(),
-                type = AppTextFieldType.NUMERIC,
+                type = AppTextFieldType.PIN,
             )
         }
         AppTextField(
@@ -1309,14 +1381,14 @@ private fun SecuritySection(
             onValueChange = trackedOnNewPinChanged,
             label = "Nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         AppTextField(
             value = uiState.confirmPinInput,
             onValueChange = trackedOnConfirmPinChanged,
             label = "Confirmer le PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         Button(
             onClick = onChangeNormalPin,
@@ -1349,21 +1421,21 @@ private fun AdvancedAccessSection(
             onValueChange = trackedOnSuperAdminCurrentPinChanged,
             label = "PIN actuel",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         AppTextField(
             value = uiState.superAdminNewPinInput,
             onValueChange = trackedOnSuperAdminNewPinChanged,
             label = "Nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         AppTextField(
             value = uiState.superAdminConfirmPinInput,
             onValueChange = trackedOnSuperAdminConfirmPinChanged,
             label = "Confirmer le nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.NUMERIC,
+            type = AppTextFieldType.PIN,
         )
         Button(
             onClick = onChangeSuperAdminPin,
@@ -1389,6 +1461,7 @@ private fun ImportExportSection(
     onClearExportFilters: () -> Unit,
     onExportAllSessions: () -> Unit,
     onExportFilteredSessions: () -> Unit,
+    onExportBoatSheets: () -> Unit,
 ) {
     var showFilters by remember { mutableStateOf(false) }
     var showFromDatePicker by remember { mutableStateOf(false) }
@@ -1543,6 +1616,14 @@ private fun ImportExportSection(
             Text(if (uiState.isWorking) "Traitement..." else "Exporter les sessions filtrées (CSV)")
         }
 
+        Button(
+            onClick = onExportBoatSheets,
+            enabled = !uiState.isWorking && uiState.boatManagement.boats.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (uiState.isWorking) "Traitement..." else "Exporter fiches bateaux")
+        }
+
         Text(
             text = "Toutes les sessions : ${uiState.exportableSessions.size} | Sessions filtrées : ${uiState.filteredExportableSessions.size}",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1553,13 +1634,21 @@ private fun ImportExportSection(
 @Composable
 private fun BackupSection(
     uiState: SettingsUiState,
+    onExportFullDatabase: () -> Unit,
     onExportBackup: () -> Unit,
     onRestoreBackup: () -> Unit,
 ) {
     SettingsSection(
         title = "Sauvegarde / Restauration",
-        description = "Exporter la base de données dans un fichier ZIP ou restaurer une sauvegarde précédente.",
+        description = "Exporter la base complète, créer une sauvegarde ZIP ou restaurer une sauvegarde précédente.",
     ) {
+        Button(
+            onClick = onExportFullDatabase,
+            enabled = !uiState.isWorking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (uiState.isWorking) "Traitement..." else "Exporter toute la base de données")
+        }
         Button(
             onClick = onExportBackup,
             enabled = !uiState.isWorking,
@@ -1820,6 +1909,16 @@ private fun defaultSessionExportFileName(): String {
 private fun defaultFilteredSessionExportFileName(): String {
     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
     return "sessions_filtered_export_$timestamp.csv"
+}
+
+private fun defaultFullDatabaseExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "base_complete_export_$timestamp.zip"
+}
+
+private fun defaultBoatSheetsExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "fiches_bateaux_export_$timestamp.csv"
 }
 
 private fun defaultDebugReportFileName(): String {

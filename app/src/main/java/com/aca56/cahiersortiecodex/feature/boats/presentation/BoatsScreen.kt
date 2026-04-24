@@ -2,6 +2,7 @@ package com.aca56.cahiersortiecodex.feature.boats.presentation
 
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,6 +49,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
+import com.aca56.cahiersortiecodex.data.export.DatabaseCsvExporter
+import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
+import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
@@ -229,6 +233,31 @@ fun BoatDetailRoute(
             viewModel.clearMessage()
         }
     }
+    val boatSheetExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri != null && uiState.boat.hasPersistentBoat) {
+            DatabaseCsvExporter.exportSingleBoatSheet(
+                contentResolver = context.contentResolver,
+                uri = uri,
+                boat = BoatEntity(
+                    id = uiState.boat.id,
+                    name = uiState.boat.name,
+                    seatCount = uiState.boat.seatCount.toIntOrNull() ?: 0,
+                    type = uiState.boat.type,
+                    weightRange = uiState.boat.weightRangeDisplay.takeUnless { it == "Non défini" }.orEmpty(),
+                    riggingType = uiState.boat.riggingTypeDisplay.takeUnless { it == "Non défini" }.orEmpty(),
+                    year = uiState.boat.year.toIntOrNull(),
+                    notes = uiState.boat.notes,
+                ),
+                remarks = uiState.boat.remarks,
+                sessions = uiState.boat.allSessionDetails,
+            )
+            viewModel.clearMessage()
+        } else {
+            viewModel.clearMessage()
+        }
+    }
 
     BoatDetailScreen(
         contentPadding = contentPadding,
@@ -255,6 +284,9 @@ fun BoatDetailRoute(
         onOpenFullHistory = onOpenFullHistory,
         onOpenBoatRemarks = onOpenBoatRemarks,
         onAddBoatRemark = onAddBoatRemark,
+        onExportBoatSheet = {
+            boatSheetExportLauncher.launch(defaultBoatSheetExportFileName(uiState.boat.name))
+        },
         onDismissMessage = viewModel::clearMessage,
     )
 }
@@ -283,6 +315,7 @@ fun BoatDetailScreen(
     onOpenFullHistory: (Long) -> Unit,
     onOpenBoatRemarks: (Long) -> Unit,
     onAddBoatRemark: (Long) -> Unit,
+    onExportBoatSheet: () -> Unit,
     onDismissMessage: () -> Unit,
 ) {
     val trackedOnNameChanged = rememberInteractionAwareValueChange(onNameChanged)
@@ -333,9 +366,15 @@ fun BoatDetailScreen(
                             onClick = onCancelEditing,
                         ) { Text("Annuler") }
                     } else {
-                        Button(
-                            onClick = onStartEditing,
-                        ) { Text("Modifier le bateau") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(
+                                onClick = onExportBoatSheet,
+                                enabled = uiState.boat.hasPersistentBoat,
+                            ) { Text("Exporter cette fiche bateau") }
+                            Button(
+                                onClick = onStartEditing,
+                            ) { Text("Modifier le bateau") }
+                        }
                     }
                 }
 
@@ -421,7 +460,7 @@ fun BoatDetailScreen(
                         value = uiState.boat.weightRangeDisplay,
                     )
                     BoatInfoSheet(
-                        title = "Type de gréement",
+                        title = "Type d’armement",
                         value = uiState.boat.riggingTypeDisplay,
                     )
                     BoatInfoSheet(
@@ -492,8 +531,13 @@ fun BoatDetailScreen(
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
                                 )
-                                remark.photoPath?.let { filePath ->
-                                    BoatPhotoPreview(filePath)
+                                val photoCount = decodeRemarkPhotoPaths(remark.photoPath).size
+                                if (photoCount > 0) {
+                                    Text(
+                                        text = "$photoCount photo(s) associée(s)",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
                             }
                         }
@@ -823,7 +867,7 @@ private fun RiggingTypeEditor(
     onCoupleChanged: (Boolean) -> Unit,
     onPointeChanged: (Boolean) -> Unit,
 ) {
-    Text("Type de gréement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text("Type d’armement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -838,6 +882,16 @@ private fun RiggingTypeEditor(
             Text("Pointe")
         }
     }
+}
+
+private fun defaultBoatSheetExportFileName(boatName: String): String {
+    val sanitizedName = boatName
+        .trim()
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+        .ifBlank { "bateau" }
+    return "fiche_${sanitizedName}.zip"
 }
 
 @Composable

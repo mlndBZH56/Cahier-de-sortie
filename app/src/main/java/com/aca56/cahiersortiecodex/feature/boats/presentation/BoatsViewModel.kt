@@ -69,6 +69,8 @@ data class BoatDetailUi(
     val remarks: List<RemarkEntity> = emptyList(),
     val photos: List<BoatPhotoUi> = emptyList(),
     val recentSessions: List<BoatSessionSummaryUi> = emptyList(),
+    val allSessions: List<BoatSessionSummaryUi> = emptyList(),
+    val allSessionDetails: List<SessionWithDetails> = emptyList(),
 ) {
     val hasPersistentBoat: Boolean
         get() = id != 0L
@@ -455,7 +457,6 @@ class BoatDetailViewModel(
                 compareByDescending<SessionWithDetails> { it.session.date }
                     .thenByDescending { it.session.startTime },
             )
-            .take(2)
             .map { session ->
                 BoatSessionSummaryUi(
                     id = session.session.id,
@@ -486,7 +487,9 @@ class BoatDetailViewModel(
                     createdAt = photo.createdAt,
                 )
             },
-            recentSessions = recentSessions,
+            recentSessions = recentSessions.take(2),
+            allSessions = recentSessions,
+            allSessionDetails = sessions.filter { it.boat.id == id },
         )
     }
 

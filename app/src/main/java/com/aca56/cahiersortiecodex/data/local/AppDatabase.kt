@@ -40,7 +40,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
         RemarkEntity::class,
         RepairUpdateEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(SessionStatusConverter::class, RemarkStatusConverter::class)
@@ -94,7 +94,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     DATABASE_NAME,
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -270,6 +270,39 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent(),
                 )
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_repair_updates_remarkId ON repair_updates(remarkId)")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS remarks_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        boatId INTEGER,
+                        sessionId INTEGER,
+                        content TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        photoPath TEXT,
+                        FOREIGN KEY(boatId) REFERENCES boats(id) ON UPDATE NO ACTION ON DELETE SET NULL,
+                        FOREIGN KEY(sessionId) REFERENCES sessions(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_new_boatId ON remarks_new(boatId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_new_sessionId ON remarks_new(sessionId)")
+                database.execSQL(
+                    """
+                    INSERT INTO remarks_new(id, boatId, sessionId, content, date, status, photoPath)
+                    SELECT id, boatId, NULL, content, date, status, photoPath
+                    FROM remarks
+                    """.trimIndent(),
+                )
+                database.execSQL("DROP TABLE remarks")
+                database.execSQL("ALTER TABLE remarks_new RENAME TO remarks")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_boatId ON remarks(boatId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_sessionId ON remarks(sessionId)")
             }
         }
     }

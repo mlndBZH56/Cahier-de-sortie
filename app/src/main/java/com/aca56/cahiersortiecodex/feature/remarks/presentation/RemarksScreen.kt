@@ -2,12 +2,13 @@ package com.aca56.cahiersortiecodex.feature.remarks.presentation
 
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
+import androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -18,12 +19,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
@@ -73,9 +77,12 @@ fun RemarksRoute(
     )
     val uiState by viewModel.uiState.collectAsState()
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = OpenDocument(),
-    ) { uri ->
-        uri?.let(viewModel::addPhoto) ?: viewModel.clearMessage()
+        contract = OpenMultipleDocuments(),
+    ) { uris ->
+        uris.forEach(viewModel::addPhoto)
+        if (uris.isEmpty()) {
+            viewModel.clearMessage()
+        }
     }
 
     RemarksScreen(
@@ -96,6 +103,8 @@ fun RemarksRoute(
         onDeleteRemark = viewModel::deleteRemark,
         onStartRepairUpdate = viewModel::startRepairUpdate,
         onStartRepairClosure = viewModel::startRepairClosure,
+        onEditRepairUpdate = viewModel::startEditingRepairUpdate,
+        onDeleteRepairUpdate = viewModel::deleteRepairUpdate,
         onCancelRepairUpdate = viewModel::cancelRepairUpdate,
         onRepairUpdateContentChanged = viewModel::onRepairUpdateContentChanged,
         onSaveRepairUpdate = viewModel::saveRepairUpdate,
@@ -117,11 +126,13 @@ fun RemarksScreen(
     onEditorStatusChanged: (RemarkStatus) -> Unit,
     onBoatForEditorSelected: (Long?) -> Unit,
     onAddPhoto: () -> Unit,
-    onRemovePhoto: () -> Unit,
+    onRemovePhoto: (String?) -> Unit,
     onSaveRemark: () -> Unit,
     onDeleteRemark: (String) -> Unit,
     onStartRepairUpdate: (String) -> Unit,
     onStartRepairClosure: (String) -> Unit,
+    onEditRepairUpdate: (Long) -> Unit,
+    onDeleteRepairUpdate: (Long) -> Unit,
     onCancelRepairUpdate: () -> Unit,
     onRepairUpdateContentChanged: (String) -> Unit,
     onSaveRepairUpdate: () -> Unit,
@@ -129,10 +140,18 @@ fun RemarksScreen(
 ) {
     var showFilterDatePicker by remember { mutableStateOf(false) }
     var showEditorDatePicker by remember { mutableStateOf(false) }
+    var showFiltersDialog by remember { mutableStateOf(false) }
     var remarkPendingDeleteKey by remember { mutableStateOf<String?>(null) }
+    var repairUpdatePendingDeleteId by remember { mutableStateOf<Long?>(null) }
+    var selectedRemarkForDetailsKey by remember { mutableStateOf<String?>(null) }
+    var selectedRepairUpdateForDetailsId by remember { mutableStateOf<Long?>(null) }
     var filterBoatSearchQuery by remember { mutableStateOf("") }
     var editorBoatSearchQuery by remember { mutableStateOf("") }
     val editingRemark = uiState.editingRemark
+    val selectedRemarkForDetails = uiState.remarks.firstOrNull { it.key == selectedRemarkForDetailsKey }
+    val selectedRepairUpdateForDetails = uiState.repairUpdatesByRemarkId.values
+        .flatten()
+        .firstOrNull { it.id == selectedRepairUpdateForDetailsId }
 
     remarkPendingDeleteKey?.let { remarkKey ->
         DeleteConfirmationDialog(
@@ -141,6 +160,29 @@ fun RemarksScreen(
                 remarkPendingDeleteKey = null
             },
             onDismiss = { remarkPendingDeleteKey = null },
+        )
+    }
+
+    repairUpdatePendingDeleteId?.let { updateId ->
+        AlertDialog(
+            onDismissRequest = { repairUpdatePendingDeleteId = null },
+            title = { Text("Confirmer la suppression ?") },
+            text = { Text("Cette action supprimera définitivement le suivi.") },
+            dismissButton = {
+                TextButton(onClick = { repairUpdatePendingDeleteId = null }) {
+                    Text("Annuler")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteRepairUpdate(updateId)
+                        repairUpdatePendingDeleteId = null
+                    },
+                ) {
+                    Text("Supprimer")
+                }
+            },
         )
     }
 
@@ -157,6 +199,143 @@ fun RemarksScreen(
             storageDate = uiState.editorDateInput,
             onDismissRequest = { showEditorDatePicker = false },
             onDateSelected = onEditorDateChanged,
+        )
+    }
+
+    if (showFiltersDialog) {
+        AppModalDialog(
+            title = "Filtres",
+            onDismiss = { showFiltersDialog = false },
+        ) {
+            SearchableSingleSelectList(
+                searchQuery = filterBoatSearchQuery,
+                onSearchQueryChanged = { filterBoatSearchQuery = it },
+                searchLabel = "Rechercher un bateau",
+                selectedKey = uiState.selectedBoatId?.toString(),
+                options = uiState.availableBoatOptions.filter { option ->
+                    filterBoatSearchQuery.isBlank() || option.label.contains(filterBoatSearchQuery.trim(), ignoreCase = true)
+                },
+                emptyLabel = "Aucun bateau disponible.",
+                noResultsLabel = "Aucun bateau ne correspond à la recherche.",
+                onOptionSelected = { selectedKey ->
+                    onBoatFilterSelected(selectedKey.toLongOrNull())
+                },
+            )
+
+            if (uiState.selectedBoatId != null) {
+                OutlinedButton(
+                    onClick = {
+                        onBoatFilterSelected(null)
+                        filterBoatSearchQuery = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Effacer le bateau")
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AppSelectorFieldButton(
+                    onClick = { showFilterDatePicker = true },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = uiState.selectedDateFilter?.let { "Date : ${formatDateForDisplay(it)}" }
+                            ?: "Toutes les dates",
+                    )
+                }
+                OutlinedButton(
+                    onClick = { onDateFilterSelected(null) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Effacer la date")
+                }
+            }
+
+            Button(
+                onClick = { showFiltersDialog = false },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Fermer")
+            }
+        }
+    }
+
+    if (uiState.isEditorVisible) {
+        AppModalDialog(
+            title = if (uiState.isEditing) "Modifier la remarque" else "Ajouter une remarque",
+            onDismiss = onCancelEditing,
+        ) {
+            RemarkEditorCard(
+                uiState = uiState,
+                editingRemark = editingRemark,
+                editorBoatSearchQuery = editorBoatSearchQuery,
+                onEditorBoatSearchQueryChanged = { editorBoatSearchQuery = it },
+                onEditorDateClick = { showEditorDatePicker = true },
+                onEditorContentChanged = onEditorContentChanged,
+                onEditorStatusChanged = onEditorStatusChanged,
+                onBoatForEditorSelected = onBoatForEditorSelected,
+                onAddPhoto = onAddPhoto,
+                onRemovePhoto = onRemovePhoto,
+                onClearEditorBoat = {
+                    onBoatForEditorSelected(null)
+                    editorBoatSearchQuery = ""
+                },
+                onCancelEditing = onCancelEditing,
+                onSaveRemark = onSaveRemark,
+            )
+        }
+    }
+
+    if (uiState.repairUpdateRemarkKey != null) {
+        AppModalDialog(
+            title = if (uiState.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) {
+                "Clôturer la réparation"
+            } else if (uiState.editingRepairUpdateId != null) {
+                "Modifier le suivi"
+            } else {
+                "Ajouter un suivi"
+            },
+            onDismiss = onCancelRepairUpdate,
+        ) {
+            RepairUpdateEditorCard(
+                mode = uiState.repairUpdateMode,
+                content = uiState.repairUpdateContentInput,
+                photoPath = uiState.repairUpdatePhotoPath,
+                isSaving = uiState.isSaving,
+                onContentChanged = onRepairUpdateContentChanged,
+                onAddPhoto = onAddPhoto,
+                onRemovePhoto = { onRemovePhoto(null) },
+                onCancel = onCancelRepairUpdate,
+                onSave = onSaveRepairUpdate,
+            )
+        }
+    }
+
+    selectedRemarkForDetails?.let { remark ->
+        RemarkDetailsDialog(
+            remark = remark,
+            repairUpdates = uiState.repairUpdatesByRemarkId[remark.id].orEmpty(),
+            onDismiss = { selectedRemarkForDetailsKey = null },
+            onEditRepairUpdate = { updateId ->
+                selectedRemarkForDetailsKey = null
+                onEditRepairUpdate(updateId)
+            },
+            onDeleteRepairUpdate = { updateId ->
+                selectedRemarkForDetailsKey = null
+                repairUpdatePendingDeleteId = updateId
+            },
+            onViewRepairUpdatePhotos = { updateId -> selectedRepairUpdateForDetailsId = updateId },
+        )
+    }
+
+    selectedRepairUpdateForDetails?.let { update ->
+        RepairUpdatePhotosDialog(
+            update = update,
+            onDismiss = { selectedRepairUpdateForDetailsId = null },
         )
     }
 
@@ -178,74 +357,11 @@ fun RemarksScreen(
                 fontWeight = FontWeight.SemiBold,
             )
 
-            Surface(
+            OutlinedButton(
+                onClick = { showFiltersDialog = true },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                tonalElevation = 2.dp,
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = "Filtres",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-
-                    SearchableSingleSelectList(
-                        searchQuery = filterBoatSearchQuery,
-                        onSearchQueryChanged = { filterBoatSearchQuery = it },
-                        searchLabel = "Rechercher un bateau",
-                        selectedKey = uiState.selectedBoatId?.toString(),
-                        options = uiState.availableBoatOptions.filter { option ->
-                            filterBoatSearchQuery.isBlank() || option.label.contains(filterBoatSearchQuery.trim(), ignoreCase = true)
-                        },
-                        emptyLabel = "Aucun bateau disponible.",
-                        noResultsLabel = "Aucun bateau ne correspond à la recherche.",
-                        onOptionSelected = { selectedKey ->
-                            onBoatFilterSelected(selectedKey.toLongOrNull())
-                        },
-                    )
-
-                    if (uiState.selectedBoatId != null) {
-                        OutlinedButton(
-                            onClick = {
-                                onBoatFilterSelected(null)
-                                filterBoatSearchQuery = ""
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Effacer le bateau")
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        AppSelectorFieldButton(
-                            onClick = {
-                                showFilterDatePicker = true
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(
-                                text = uiState.selectedDateFilter?.let { "Date : ${formatDateForDisplay(it)}" }
-                                    ?: "Toutes les dates",
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = { onDateFilterSelected(null) },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("Effacer la date")
-                        }
-                    }
-                }
+                Text("Ouvrir les filtres")
             }
 
             Button(
@@ -260,27 +376,6 @@ fun RemarksScreen(
                     } else {
                         "Ajouter une remarque"
                     },
-                )
-            }
-
-            if (uiState.isEditorVisible && !uiState.isEditing) {
-                RemarkEditorCard(
-                    uiState = uiState,
-                    editingRemark = editingRemark,
-                    editorBoatSearchQuery = editorBoatSearchQuery,
-                    onEditorBoatSearchQueryChanged = { editorBoatSearchQuery = it },
-                    onEditorDateClick = { showEditorDatePicker = true },
-                    onEditorStatusChanged = onEditorStatusChanged,
-                    onEditorContentChanged = onEditorContentChanged,
-                    onBoatForEditorSelected = onBoatForEditorSelected,
-                    onAddPhoto = onAddPhoto,
-                    onRemovePhoto = onRemovePhoto,
-                    onClearEditorBoat = {
-                        onBoatForEditorSelected(null)
-                        editorBoatSearchQuery = ""
-                    },
-                    onCancelEditing = onCancelEditing,
-                    onSaveRemark = onSaveRemark,
                 )
             }
 
@@ -357,12 +452,22 @@ fun RemarksScreen(
                                 fontWeight = FontWeight.SemiBold,
                             )
 
-                            remark.photoPath?.let { photoPath ->
-                                RemarkPhotoPreview(photoPath = photoPath)
+                            if (remark.photoPaths.isNotEmpty()) {
+                                OutlinedButton(
+                                    onClick = { selectedRemarkForDetailsKey = remark.key },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Voir les photos")
+                                }
                             }
 
                             uiState.repairUpdatesByRemarkId[remark.id].orEmpty().forEach { update ->
-                                RepairUpdateCard(update = update)
+                                RepairUpdateCard(
+                                    update = update,
+                                    onEdit = { onEditRepairUpdate(update.id) },
+                                    onDelete = { repairUpdatePendingDeleteId = update.id },
+                                    onViewPhotos = { selectedRepairUpdateForDetailsId = update.id },
+                                )
                             }
 
                             Row(
@@ -403,40 +508,6 @@ fun RemarksScreen(
                                 }
                             }
 
-                            if (uiState.repairUpdateRemarkKey == remark.key) {
-                                RepairUpdateEditorCard(
-                                    mode = uiState.repairUpdateMode,
-                                    content = uiState.repairUpdateContentInput,
-                                    photoPath = uiState.repairUpdatePhotoPath,
-                                    isSaving = uiState.isSaving,
-                                    onContentChanged = onRepairUpdateContentChanged,
-                                    onAddPhoto = onAddPhoto,
-                                    onRemovePhoto = onRemovePhoto,
-                                    onCancel = onCancelRepairUpdate,
-                                    onSave = onSaveRepairUpdate,
-                                )
-                            }
-
-                            if (uiState.isEditorVisible && uiState.editingRemarkKey == remark.key) {
-                                RemarkEditorCard(
-                                    uiState = uiState,
-                                    editingRemark = editingRemark,
-                                    editorBoatSearchQuery = editorBoatSearchQuery,
-                                    onEditorBoatSearchQueryChanged = { editorBoatSearchQuery = it },
-                                    onEditorDateClick = { showEditorDatePicker = true },
-                                    onEditorContentChanged = onEditorContentChanged,
-                                    onEditorStatusChanged = onEditorStatusChanged,
-                                    onBoatForEditorSelected = onBoatForEditorSelected,
-                                    onAddPhoto = onAddPhoto,
-                                    onRemovePhoto = onRemovePhoto,
-                                    onClearEditorBoat = {
-                                        onBoatForEditorSelected(null)
-                                        editorBoatSearchQuery = ""
-                                    },
-                                    onCancelEditing = onCancelEditing,
-                                    onSaveRemark = onSaveRemark,
-                                )
-                            }
                         }
                     }
                 }
@@ -464,7 +535,7 @@ private fun RemarkEditorCard(
     onEditorStatusChanged: (RemarkStatus) -> Unit,
     onBoatForEditorSelected: (Long?) -> Unit,
     onAddPhoto: () -> Unit,
-    onRemovePhoto: () -> Unit,
+    onRemovePhoto: (String?) -> Unit,
     onClearEditorBoat: () -> Unit,
     onCancelEditing: () -> Unit,
     onSaveRemark: () -> Unit,
@@ -577,10 +648,6 @@ private fun RemarkEditorCard(
                     )
                 }
 
-                uiState.editorPhotoPath?.let { photoPath ->
-                    RemarkPhotoPreview(photoPath = photoPath)
-                }
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -589,14 +656,30 @@ private fun RemarkEditorCard(
                         onClick = onAddPhoto,
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(if (uiState.editorPhotoPath == null) "Ajouter une photo" else "Changer la photo")
+                        Text("Ajouter une photo")
                     }
-                    if (uiState.editorPhotoPath != null) {
+                    if (uiState.editorPhotoPaths.isNotEmpty()) {
                         OutlinedButton(
-                            onClick = onRemovePhoto,
+                            onClick = { onRemovePhoto(uiState.editorPhotoPaths.last()) },
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text("Retirer la photo")
+                            Text("Retirer la dernière photo")
+                        }
+                    }
+                }
+                if (uiState.editorPhotoPaths.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        uiState.editorPhotoPaths.forEachIndexed { index, path ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Photo ${index + 1}")
+                                OutlinedButton(onClick = { onRemovePhoto(path) }) {
+                                    Text("Retirer")
+                                }
+                            }
                         }
                     }
                 }
@@ -664,7 +747,12 @@ private fun RemarkPhotoPreview(photoPath: String) {
 }
 
 @Composable
-private fun RepairUpdateCard(update: RepairUpdateItemUi) {
+private fun RepairUpdateCard(
+    update: RepairUpdateItemUi,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onViewPhotos: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -686,8 +774,24 @@ private fun RepairUpdateCard(update: RepairUpdateItemUi) {
                 text = update.content,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            update.photoPath?.let { photoPath ->
-                RemarkPhotoPreview(photoPath = photoPath)
+            if (update.photoPath != null) {
+                OutlinedButton(
+                    onClick = onViewPhotos,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Voir les photos")
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
+                    Text("Modifier")
+                }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+                    Text("Supprimer")
+                }
             }
         }
     }
@@ -784,6 +888,122 @@ private fun RepairUpdateEditorCard(
                 ) {
                     Text(if (isSaving) "Enregistrement..." else "Valider")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemarkDetailsDialog(
+    remark: RemarkItemUi,
+    repairUpdates: List<RepairUpdateItemUi>,
+    onDismiss: () -> Unit,
+    onEditRepairUpdate: (Long) -> Unit,
+    onDeleteRepairUpdate: (Long) -> Unit,
+    onViewRepairUpdatePhotos: (Long) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Détails de la remarque") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Date : ${formatDateForDisplay(remark.date)}")
+                Text("Bateau : ${remark.boatName.ifBlank { "Aucun bateau" }}")
+                Text("Statut : ${remark.status.displayLabel()}")
+                Text(remark.content)
+
+                if (remark.photoPaths.isNotEmpty()) {
+                    Text(
+                        text = "Photos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    remark.photoPaths.forEach { photoPath ->
+                        RemarkPhotoPreview(photoPath = photoPath)
+                    }
+                }
+
+                if (repairUpdates.isNotEmpty()) {
+                    Text(
+                        text = "Suivis",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    repairUpdates.forEach { update ->
+                        RepairUpdateCard(
+                            update = update,
+                            onEdit = { onEditRepairUpdate(update.id) },
+                            onDelete = { onDeleteRepairUpdate(update.id) },
+                            onViewPhotos = { onViewRepairUpdatePhotos(update.id) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer")
+            }
+        },
+    )
+}
+
+@Composable
+private fun RepairUpdatePhotosDialog(
+    update: RepairUpdateItemUi,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Photos du suivi") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(update.createdAt)
+                Text(update.content)
+                update.photoPath?.let { path ->
+                    RemarkPhotoPreview(photoPath = path)
+                } ?: Text("Aucune photo associée.")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer")
+            }
+        },
+    )
+}
+
+@Composable
+private fun AppModalDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                content()
             }
         }
     }
