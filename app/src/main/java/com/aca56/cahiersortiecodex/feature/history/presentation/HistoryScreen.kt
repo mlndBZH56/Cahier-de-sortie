@@ -42,7 +42,6 @@ import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.currentStorageDate
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 
 @Composable
 fun HistoryRoute(
@@ -165,7 +164,6 @@ private fun HistoryFilters(
     onDestinationFilterChanged: (String?) -> Unit,
     onClearFilters: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     var showDateFromPicker by remember { mutableStateOf(false) }
     var showDateToPicker by remember { mutableStateOf(false) }
     var boatSearchQuery by remember { mutableStateOf("") }
@@ -237,7 +235,6 @@ private fun HistoryFilters(
                 emptyLabel = "Aucun bateau disponible.",
                 noResultsLabel = "Aucun bateau ne correspond à la recherche.",
                 onOptionSelected = { selectedKey ->
-                    dismissKeyboard()
                     onBoatSelected(selectedKey.toLongOrNull())
                 },
             )
@@ -245,7 +242,6 @@ private fun HistoryFilters(
             if (uiState.selectedBoatId != null) {
                 OutlinedButton(
                     onClick = {
-                        dismissKeyboard()
                         onBoatSelected(null)
                         boatSearchQuery = ""
                     },
@@ -257,7 +253,6 @@ private fun HistoryFilters(
 
             AppSelectorFieldButton(
                 onClick = {
-                    dismissKeyboard()
                     showDateFromPicker = true
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -273,7 +268,6 @@ private fun HistoryFilters(
 
             AppSelectorFieldButton(
                 onClick = {
-                    dismissKeyboard()
                     showDateToPicker = true
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -294,7 +288,6 @@ private fun HistoryFilters(
                 if (uiState.dateFromFilter.isNotBlank()) {
                     OutlinedButton(
                         onClick = {
-                            dismissKeyboard()
                             onDateFromFilterChanged("")
                         },
                         modifier = Modifier.weight(1f),
@@ -305,7 +298,6 @@ private fun HistoryFilters(
                 if (uiState.dateToFilter.isNotBlank()) {
                     OutlinedButton(
                         onClick = {
-                            dismissKeyboard()
                             onDateToFilterChanged("")
                         },
                         modifier = Modifier.weight(1f),
@@ -318,7 +310,6 @@ private fun HistoryFilters(
             Box(modifier = Modifier.fillMaxWidth()) {
                 AppSelectorFieldButton(
                     onClick = {
-                        dismissKeyboard()
                         destinationMenuExpanded = true
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -334,7 +325,6 @@ private fun HistoryFilters(
                     DropdownMenuItem(
                         text = { Text("Toutes les destinations") },
                         onClick = {
-                            dismissKeyboard()
                             onDestinationFilterChanged(null)
                             destinationMenuExpanded = false
                         },
@@ -343,7 +333,6 @@ private fun HistoryFilters(
                         DropdownMenuItem(
                             text = { Text(destination.label) },
                             onClick = {
-                                dismissKeyboard()
                                 onDestinationFilterChanged(destination.key)
                                 destinationMenuExpanded = false
                             },
@@ -353,10 +342,7 @@ private fun HistoryFilters(
             }
 
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onClearFilters()
-                },
+                onClick = onClearFilters,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Effacer les filtres")

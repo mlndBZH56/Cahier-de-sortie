@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -44,10 +45,7 @@ import com.aca56.cahiersortiecodex.ui.components.DeleteConfirmationDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
-import com.aca56.cahiersortiecodex.ui.components.rememberDoneKeyboardActions
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
-import androidx.compose.foundation.text.KeyboardOptions
 
 @Composable
 fun OngoingSessionsRoute(
@@ -228,8 +226,6 @@ private fun BulkSelectionActionCard(
     isSaving: Boolean,
     onOpenBulkCompletionEditor: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -256,10 +252,7 @@ private fun BulkSelectionActionCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onOpenBulkCompletionEditor()
-                },
+                onClick = onOpenBulkCompletionEditor,
                 enabled = !isSaving && selectedCount > 0,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -338,8 +331,6 @@ private fun OngoingSessionCard(
     onDeleteSession: () -> Unit,
     onEditSession: (Long) -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -399,7 +390,6 @@ private fun OngoingSessionCard(
             } else {
                 Button(
                     onClick = {
-                        dismissKeyboard()
                         if (isOpened) {
                             onFermerSession()
                         } else {
@@ -444,8 +434,6 @@ private fun BulkCompletionCard(
     onDestinationChanged: (String) -> Unit,
     onCompleteSelectedSessions: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-    val keyboardActions = rememberDoneKeyboardActions()
     val trackedOnKmChanged = rememberInteractionAwareValueChange(onKmChanged)
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
     val trackedOnDestinationChanged = rememberInteractionAwareValueChange(onDestinationChanged)
@@ -491,7 +479,6 @@ private fun BulkCompletionCard(
 
             AppSelectorFieldButton(
                 onClick = {
-                    dismissKeyboard()
                     showEndTimePicker = true
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -508,7 +495,6 @@ private fun BulkCompletionCard(
             Box(modifier = Modifier.fillMaxWidth()) {
                 AppSelectorFieldButton(
                     onClick = {
-                        dismissKeyboard()
                         destinationMenuExpanded = true
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -524,7 +510,6 @@ private fun BulkCompletionCard(
                     DropdownMenuItem(
                         text = { Text("Aucune destination") },
                         onClick = {
-                            dismissKeyboard()
                             onDestinationSelected(null)
                             destinationMenuExpanded = false
                         },
@@ -533,7 +518,6 @@ private fun BulkCompletionCard(
                         DropdownMenuItem(
                             text = { Text(destination.name) },
                             onClick = {
-                                dismissKeyboard()
                                 onDestinationSelected(destination.id)
                                 destinationMenuExpanded = false
                             },
@@ -542,7 +526,6 @@ private fun BulkCompletionCard(
                     DropdownMenuItem(
                         text = { Text("Autre") },
                         onClick = {
-                            dismissKeyboard()
                             onCustomDestinationSelected()
                             destinationMenuExpanded = false
                         },
@@ -556,8 +539,11 @@ private fun BulkCompletionCard(
                     onValueChange = trackedOnDestinationChanged,
                     label = { Text("Destination personnalisée") },
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                    ),
                     singleLine = true,
-                    keyboardActions = keyboardActions,
+                    maxLines = 1,
                 )
             }
 
@@ -566,9 +552,11 @@ private fun BulkCompletionCard(
                 onValueChange = trackedOnKmChanged,
                 label = { Text("Km") },
                 modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                ),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                keyboardActions = keyboardActions,
+                maxLines = 1,
             )
 
             OutlinedTextField(
@@ -576,15 +564,13 @@ private fun BulkCompletionCard(
                 onValueChange = trackedOnRemarksChanged,
                 label = { Text("Remarques") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                keyboardActions = keyboardActions,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                ),
             )
 
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onCompleteSelectedSessions()
-                },
+                onClick = onCompleteSelectedSessions,
                 enabled = uiState.canBulkComplete,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -611,8 +597,6 @@ private fun SessionInlineEditorCard(
     onDeleteSession: () -> Unit,
     onEditSession: (Long) -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-    val keyboardActions = rememberDoneKeyboardActions()
     val trackedOnKmChanged = rememberInteractionAwareValueChange(onKmChanged)
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
     val trackedOnDestinationChanged = rememberInteractionAwareValueChange(onDestinationChanged)
@@ -685,7 +669,6 @@ private fun SessionInlineEditorCard(
 
             AppSelectorFieldButton(
                 onClick = {
-                    dismissKeyboard()
                     showEndTimePicker = true
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -702,7 +685,6 @@ private fun SessionInlineEditorCard(
             Box(modifier = Modifier.fillMaxWidth()) {
                 AppSelectorFieldButton(
                     onClick = {
-                        dismissKeyboard()
                         destinationMenuExpanded = true
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -718,7 +700,6 @@ private fun SessionInlineEditorCard(
                     DropdownMenuItem(
                             text = { Text("Aucune destination") },
                         onClick = {
-                            dismissKeyboard()
                             onDestinationSelected(null)
                             destinationMenuExpanded = false
                         },
@@ -727,7 +708,6 @@ private fun SessionInlineEditorCard(
                         DropdownMenuItem(
                             text = { Text(destination.name) },
                             onClick = {
-                                dismissKeyboard()
                                 onDestinationSelected(destination.id)
                                 destinationMenuExpanded = false
                             },
@@ -736,7 +716,6 @@ private fun SessionInlineEditorCard(
                     DropdownMenuItem(
                             text = { Text("Autre") },
                         onClick = {
-                            dismissKeyboard()
                             onCustomDestinationSelected()
                             destinationMenuExpanded = false
                         },
@@ -750,8 +729,11 @@ private fun SessionInlineEditorCard(
                     onValueChange = trackedOnDestinationChanged,
                     label = { Text("Destination personnalisée") },
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                    ),
                     singleLine = true,
-                    keyboardActions = keyboardActions,
+                    maxLines = 1,
                 )
             }
 
@@ -760,9 +742,11 @@ private fun SessionInlineEditorCard(
                 onValueChange = trackedOnKmChanged,
                 label = { Text("Km") },
                 modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                ),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                keyboardActions = keyboardActions,
+                maxLines = 1,
             )
 
             OutlinedTextField(
@@ -770,8 +754,9 @@ private fun SessionInlineEditorCard(
                 onValueChange = trackedOnRemarksChanged,
                 label = { Text("Remarques") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                keyboardActions = keyboardActions,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                ),
             )
         }
     }
@@ -781,19 +766,13 @@ private fun SessionInlineEditorCard(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         OutlinedButton(
-            onClick = {
-                dismissKeyboard()
-                onFermerSession()
-            },
+            onClick = onFermerSession,
             modifier = Modifier.weight(1f),
         ) {
         Text("Fermer")
         }
         Button(
-            onClick = {
-                dismissKeyboard()
-                onEditSession(session.id)
-            },
+            onClick = { onEditSession(session.id) },
             modifier = Modifier.weight(1f),
         ) {
             Text("Modifier la session")
@@ -801,10 +780,7 @@ private fun SessionInlineEditorCard(
     }
 
     Button(
-        onClick = {
-            dismissKeyboard()
-            onCompleteSession()
-        },
+        onClick = onCompleteSession,
         enabled = uiState.canComplete,
         modifier = Modifier
             .fillMaxWidth()
@@ -818,10 +794,7 @@ private fun SessionInlineEditorCard(
         horizontalArrangement = Arrangement.End,
     ) {
         OutlinedButton(
-            onClick = {
-                dismissKeyboard()
-                onDeleteSession()
-            },
+            onClick = onDeleteSession,
             enabled = !uiState.isSaving,
         ) {
                 Text("Supprimer")

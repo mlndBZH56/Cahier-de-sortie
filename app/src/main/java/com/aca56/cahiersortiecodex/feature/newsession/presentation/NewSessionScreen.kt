@@ -16,8 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -54,8 +54,6 @@ import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
-import com.aca56.cahiersortiecodex.ui.components.rememberDoneKeyboardActions
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
 
 @Composable
@@ -202,7 +200,6 @@ fun NewSessionScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var boatSearchQuery by remember { mutableStateOf("") }
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnKmChanged = rememberInteractionAwareValueChange(onKmChanged)
     val trackedOnRemarksChanged = rememberInteractionAwareValueChange(onRemarksChanged)
     val trackedOnDestinationChanged = rememberInteractionAwareValueChange(onDestinationChanged)
@@ -291,19 +288,13 @@ fun NewSessionScreen(
             HeaderRow(
                 title = screenTitle,
                 showReset = !uiState.isEditMode,
-                onResetForm = {
-                    dismissKeyboard()
-                    onResetForm()
-                },
+                onResetForm = onResetForm,
             )
 
             if (!uiState.isEditMode) {
                 ModeToggleCard(
                     isQuickMode = uiState.isQuickMode,
-                    onToggleQuickMode = {
-                        dismissKeyboard()
-                        onToggleQuickMode()
-                    },
+                    onToggleQuickMode = onToggleQuickMode,
                 )
             }
 
@@ -315,7 +306,6 @@ fun NewSessionScreen(
                     FormGroupTitle("Date")
                     AppSelectorFieldButton(
                         onClick = {
-                            dismissKeyboard()
                             showDatePicker = true
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -326,7 +316,6 @@ fun NewSessionScreen(
                     FormGroupTitle("Heure de départ")
                     SessionSelectionButton(
                         onClick = {
-                            dismissKeyboard()
                             showTimePicker = true
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -338,7 +327,6 @@ fun NewSessionScreen(
                     Box(modifier = Modifier.fillMaxWidth()) {
                         SessionSelectionButton(
                             onClick = {
-                                dismissKeyboard()
                                 destinationMenuExpanded = true
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -354,7 +342,6 @@ fun NewSessionScreen(
                             DropdownMenuItem(
                                 text = { Text("Aucune destination") },
                                 onClick = {
-                                    dismissKeyboard()
                                     onDestinationSelected(null)
                                     destinationMenuExpanded = false
                                 },
@@ -363,7 +350,6 @@ fun NewSessionScreen(
                                 DropdownMenuItem(
                                     text = { Text(destination.name) },
                                     onClick = {
-                                        dismissKeyboard()
                                         onDestinationSelected(destination.id)
                                         destinationMenuExpanded = false
                                     },
@@ -372,7 +358,6 @@ fun NewSessionScreen(
                             DropdownMenuItem(
                                 text = { Text("Autre") },
                                 onClick = {
-                                    dismissKeyboard()
                                     onCustomDestinationSelected()
                                     destinationMenuExpanded = false
                                 },
@@ -381,13 +366,13 @@ fun NewSessionScreen(
                     }
 
                     if (uiState.isCustomDestination) {
-                        SessionOutlinedTextField(
-                            value = uiState.destination,
-                            onValueChange = trackedOnDestinationChanged,
-                            label = { Text("Destination personnalisee") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
+                    SessionOutlinedTextField(
+                        value = uiState.destination,
+                        onValueChange = trackedOnDestinationChanged,
+                        label = { Text("Destination personnalisee") },
+                        modifier = Modifier.fillMaxWidth(),
+                        type = SessionFieldType.SIMPLE,
+                    )
                     }
                 }
             } else {
@@ -416,7 +401,6 @@ fun NewSessionScreen(
                     emptyLabel = "Aucun bateau disponible pour le moment.",
                     noResultsLabel = "Aucun bateau ne correspond a la recherche.",
                     onOptionSelected = { selectedKey ->
-                        dismissKeyboard()
                         selectedKey.toLongOrNull()?.let(onBoatSelected)
                     },
                 )
@@ -428,10 +412,7 @@ fun NewSessionScreen(
                 if (uiState.suggestedCrew.isNotEmpty()) {
                     CompactSuggestionsSection(
                         suggestions = uiState.suggestedCrew,
-                        onApplySuggestion = { rowerId ->
-                            dismissKeyboard()
-                            onApplySuggestedCrewMember(rowerId)
-                        },
+                        onApplySuggestion = onApplySuggestedCrewMember,
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -462,7 +443,6 @@ fun NewSessionScreen(
                     emptyLabel = "Aucun rameur enregistre pour le moment.",
                     noResultsLabel = "Aucun rameur ne correspond a la recherche.",
                     onOptionToggled = { optionKey ->
-                        dismissKeyboard()
                         optionKey.toLongOrNull()?.let { rowerId ->
                             val checked = !uiState.selectedRowerIds.contains(rowerId)
                             onRowerChecked(rowerId, checked)
@@ -481,14 +461,11 @@ fun NewSessionScreen(
                         onValueChange = trackedOnGuestRowerNameChanged,
                         label = { Text("Nom complet du rameur invité") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
+                        type = SessionFieldType.SIMPLE,
                     )
 
                     Button(
-                        onClick = {
-                            dismissKeyboard()
-                            onAddGuestRower()
-                        },
+                        onClick = onAddGuestRower,
                         shape = MaterialTheme.shapes.medium,
                     ) {
                         Text("Ajouter un rameur invité")
@@ -508,10 +485,7 @@ fun NewSessionScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(guest.fullName)
-                                OutlinedButton(onClick = {
-                                    dismissKeyboard()
-                                    onRemoveGuestRower(guest.localId)
-                                }) {
+                                OutlinedButton(onClick = { onRemoveGuestRower(guest.localId) }) {
                                     Text("Retirer")
                                 }
                             }
@@ -532,7 +506,6 @@ fun NewSessionScreen(
                     ) {
                         SessionSelectionButton(
                             onClick = {
-                                dismissKeyboard()
                                 showEndTimePicker = true
                             },
                             modifier = Modifier.weight(1f),
@@ -549,7 +522,6 @@ fun NewSessionScreen(
                         if (uiState.endTime.isNotBlank()) {
                             OutlinedButton(
                                 onClick = {
-                                    dismissKeyboard()
                                     onEndTimeChanged("")
                                 },
                                 modifier = Modifier.weight(1f),
@@ -566,8 +538,7 @@ fun NewSessionScreen(
                         onValueChange = trackedOnKmChanged,
                         label = { Text("Km") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        type = SessionFieldType.NUMERIC,
                     )
 
                     FormGroupTitle("Remarques")
@@ -576,16 +547,13 @@ fun NewSessionScreen(
                         onValueChange = trackedOnRemarksChanged,
                         label = { Text("Remarques") },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
+                        type = SessionFieldType.LONG_TEXT,
                     )
                 }
             }
 
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onSaveSession()
-                },
+                onClick = onSaveSession,
                 enabled = uiState.canSave,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -858,21 +826,22 @@ private fun SessionOutlinedTextField(
     onValueChange: (String) -> Unit,
     label: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    singleLine: Boolean = false,
-    minLines: Int = 1,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    type: SessionFieldType = SessionFieldType.SIMPLE,
 ) {
-    val keyboardActions = rememberDoneKeyboardActions()
+    val keyboardOptions = when (type) {
+        SessionFieldType.SIMPLE -> KeyboardOptions(keyboardType = KeyboardType.Text)
+        SessionFieldType.NUMERIC -> KeyboardOptions(keyboardType = KeyboardType.Number)
+        SessionFieldType.LONG_TEXT -> KeyboardOptions(keyboardType = KeyboardType.Text)
+    }
 
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = label,
         modifier = modifier,
-        singleLine = singleLine,
-        minLines = minLines,
         keyboardOptions = keyboardOptions,
-        keyboardActions = keyboardActions,
+        singleLine = type != SessionFieldType.LONG_TEXT,
+        maxLines = if (type == SessionFieldType.LONG_TEXT) Int.MAX_VALUE else 1,
         shape = MaterialTheme.shapes.medium,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -883,6 +852,12 @@ private fun SessionOutlinedTextField(
             unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
     )
+}
+
+private enum class SessionFieldType {
+    SIMPLE,
+    NUMERIC,
+    LONG_TEXT,
 }
 
 @Composable

@@ -7,9 +7,14 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+
+enum class AppTextFieldType {
+    SEARCH,
+    SIMPLE,
+    NUMERIC,
+    LONG_TEXT,
+}
 
 @Composable
 fun AppTextField(
@@ -17,27 +22,23 @@ fun AppTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
-    singleLine: Boolean = false,
-    minLines: Int = 1,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
+    type: AppTextFieldType = AppTextFieldType.SIMPLE,
 ) {
-    val focusManager = LocalFocusManager.current
+    val keyboardOptions = when (type) {
+        AppTextFieldType.SEARCH -> KeyboardOptions(keyboardType = KeyboardType.Text)
+        AppTextFieldType.SIMPLE -> KeyboardOptions(keyboardType = KeyboardType.Text)
+        AppTextFieldType.NUMERIC -> KeyboardOptions(keyboardType = KeyboardType.Number)
+        AppTextFieldType.LONG_TEXT -> KeyboardOptions(keyboardType = KeyboardType.Text)
+    }
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         modifier = modifier,
-        singleLine = singleLine,
-        minLines = minLines,
         keyboardOptions = keyboardOptions,
-        keyboardActions = KeyboardActions(
-            onDone = { focusManager.clearFocus(force = true) },
-            onGo = { focusManager.clearFocus(force = true) },
-            onSearch = { focusManager.clearFocus(force = true) },
-            onSend = { focusManager.clearFocus(force = true) },
-        ),
-        visualTransformation = visualTransformation,
+        singleLine = type != AppTextFieldType.LONG_TEXT,
+        maxLines = if (type == AppTextFieldType.LONG_TEXT) Int.MAX_VALUE else 1,
         shape = MaterialTheme.shapes.medium,
         colors = appOutlinedTextFieldColors(),
     )

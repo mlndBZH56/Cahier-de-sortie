@@ -34,15 +34,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.settings.ThemeMode
 import com.aca56.cahiersortiecodex.ui.components.AppTextField
+import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
 import com.aca56.cahiersortiecodex.ui.components.ConfirmationDialog
@@ -50,9 +48,7 @@ import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
-import com.aca56.cahiersortiecodex.ui.components.rememberDoneKeyboardActions
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
-import com.aca56.cahiersortiecodex.ui.components.rememberDismissKeyboardAction
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -326,7 +322,6 @@ private fun CreatePinScreen(
     onConfirmPinChanged: (String) -> Unit,
     onSaveFirstPin: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnNewPinChanged = rememberInteractionAwareValueChange(onNewPinChanged)
     val trackedOnConfirmPinChanged = rememberInteractionAwareValueChange(onConfirmPinChanged)
 
@@ -340,22 +335,17 @@ private fun CreatePinScreen(
             onValueChange = trackedOnNewPinChanged,
             label = "Nouveau code PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         AppTextField(
             value = uiState.confirmPinInput,
             onValueChange = trackedOnConfirmPinChanged,
             label = "Confirmer le code PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         Button(
             onClick = {
-                dismissKeyboard()
                 onSaveFirstPin()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -372,7 +362,6 @@ private fun UnlockSettingsScreen(
     onPinInputChanged: (String) -> Unit,
     onUnlockSettings: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnPinInputChanged = rememberInteractionAwareValueChange(onPinInputChanged)
 
     SettingsGateScreen(
@@ -385,13 +374,10 @@ private fun UnlockSettingsScreen(
             onValueChange = trackedOnPinInputChanged,
             label = "Saisir le code PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         Button(
             onClick = {
-                dismissKeyboard()
                 onUnlockSettings()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -536,9 +522,7 @@ private fun SettingsContent(
                         onValueChange = { resetPinInput = it.filter(Char::isDigit) },
                         label = "Code PIN super administrateur",
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        visualTransformation = PasswordVisualTransformation(),
+                        type = AppTextFieldType.NUMERIC,
                     )
                 }
             },
@@ -817,35 +801,24 @@ private fun ManagementLinksSection(
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-
     SettingsSection(
         title = "Gérer les données",
         description = "Ouvrir les écrans de gestion des rameurs, bateaux et destinations.",
     ) {
         Button(
-            onClick = {
-                dismissKeyboard()
-                onOpenRowers()
-            },
+            onClick = onOpenRowers,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Ouvrir l'écran des rameurs")
         }
         Button(
-            onClick = {
-                dismissKeyboard()
-                onOpenBoats()
-            },
+            onClick = onOpenBoats,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Ouvrir l'écran des bateaux")
         }
         Button(
-            onClick = {
-                dismissKeyboard()
-                onOpenDestinations()
-            },
+            onClick = onOpenDestinations,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Ouvrir l'écran des destinations")
@@ -898,7 +871,6 @@ private fun RowerManagementSection(
     onDelete: (RowerEntity) -> Unit,
     onImportRowers: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnFirstNameChanged = rememberInteractionAwareValueChange(onFirstNameChanged)
     val trackedOnLastNameChanged = rememberInteractionAwareValueChange(onLastNameChanged)
 
@@ -907,10 +879,7 @@ private fun RowerManagementSection(
         description = "Ajouter, modifier, supprimer ou importer des rameurs.",
     ) {
         OutlinedButton(
-            onClick = {
-                dismissKeyboard()
-                onImportRowers()
-            },
+            onClick = onImportRowers,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -921,24 +890,21 @@ private fun RowerManagementSection(
             onValueChange = trackedOnFirstNameChanged,
             label = "Prénom",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         AppTextField(
             value = uiState.rowerManagement.lastNameInput,
             onValueChange = trackedOnLastNameChanged,
             label = "Nom",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onSave()
-                },
+                onClick = onSave,
                 enabled = !uiState.isWorking,
                 modifier = Modifier.weight(1f),
             ) {
@@ -946,10 +912,7 @@ private fun RowerManagementSection(
             }
             if (uiState.rowerManagement.isEditing) {
                 OutlinedButton(
-                    onClick = {
-                        dismissKeyboard()
-                        onCancelEditing()
-                    },
+                    onClick = onCancelEditing,
                     enabled = !uiState.isWorking,
                     modifier = Modifier.weight(1f),
                 ) {
@@ -987,7 +950,6 @@ private fun BoatManagementSection(
     onDeleteBoat: (BoatEntity) -> Unit,
     onImportBoats: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnBoatNameChanged = rememberInteractionAwareValueChange(onBoatNameChanged)
     val trackedOnBoatSeatCountChanged = rememberInteractionAwareValueChange(onBoatSeatCountChanged)
 
@@ -996,10 +958,7 @@ private fun BoatManagementSection(
         description = "Ajouter, modifier ou supprimer des bateaux et leur nombre de places.",
     ) {
         OutlinedButton(
-            onClick = {
-                dismissKeyboard()
-                onImportBoats()
-            },
+            onClick = onImportBoats,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1010,24 +969,21 @@ private fun BoatManagementSection(
             onValueChange = trackedOnBoatNameChanged,
             label = "Nom du bateau",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         AppTextField(
             value = uiState.boatManagement.seatCountInput,
             onValueChange = trackedOnBoatSeatCountChanged,
             label = "Nombre de places",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.NUMERIC,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onSaveBoat()
-                },
+                onClick = onSaveBoat,
                 enabled = !uiState.isWorking,
                 modifier = Modifier.weight(1f),
             ) {
@@ -1035,10 +991,7 @@ private fun BoatManagementSection(
             }
             if (uiState.boatManagement.isEditing) {
                 OutlinedButton(
-                    onClick = {
-                        dismissKeyboard()
-                        onCancelBoatEditing()
-                    },
+                    onClick = onCancelBoatEditing,
                     enabled = !uiState.isWorking,
                     modifier = Modifier.weight(1f),
                 ) {
@@ -1074,7 +1027,6 @@ private fun DestinationManagementSection(
     onCancelDestinationEditing: () -> Unit,
     onDeleteDestination: (DestinationEntity) -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnDestinationNameChanged = rememberInteractionAwareValueChange(onDestinationNameChanged)
 
     SettingsSection(
@@ -1088,19 +1040,16 @@ private fun DestinationManagementSection(
                         "Modifier la destination"
                     } else {
                         "Nouvelle destination"
-                    },
+            },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = {
-                    dismissKeyboard()
-                    onSaveDestination()
-                },
+                onClick = onSaveDestination,
                 enabled = !uiState.isWorking,
                 modifier = Modifier.weight(1f),
             ) {
@@ -1108,10 +1057,7 @@ private fun DestinationManagementSection(
             }
             if (uiState.destinationManagement.isEditing) {
                 OutlinedButton(
-                    onClick = {
-                        dismissKeyboard()
-                        onCancelDestinationEditing()
-                    },
+                    onClick = onCancelDestinationEditing,
                     enabled = !uiState.isWorking,
                     modifier = Modifier.weight(1f),
                 ) {
@@ -1146,7 +1092,6 @@ private fun AppBehaviorSection(
     onAnimationsEnabledChanged: (Boolean) -> Unit,
     onSaveAppSettings: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnInactivityTimeoutMinutesChanged = rememberInteractionAwareValueChange(onInactivityTimeoutMinutesChanged)
 
     SettingsSection(
@@ -1158,7 +1103,7 @@ private fun AppBehaviorSection(
             onValueChange = trackedOnInactivityTimeoutMinutesChanged,
             label = "Délai d'inactivité (minutes)",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.NUMERIC,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1178,10 +1123,7 @@ private fun AppBehaviorSection(
             }
             Switch(
                 checked = uiState.animationsEnabled,
-                onCheckedChange = { value ->
-                    dismissKeyboard()
-                    onAnimationsEnabledChanged(value)
-                },
+                onCheckedChange = onAnimationsEnabledChanged,
             )
         }
         Text(
@@ -1193,10 +1135,7 @@ private fun AppBehaviorSection(
             val isSelected = uiState.themeMode == themeMode
             if (isSelected) {
                 Button(
-                    onClick = {
-                        dismissKeyboard()
-                        onThemeModeChanged(themeMode)
-                    },
+                    onClick = { onThemeModeChanged(themeMode) },
                     enabled = !uiState.isWorking,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1204,10 +1143,7 @@ private fun AppBehaviorSection(
                 }
             } else {
                 OutlinedButton(
-                    onClick = {
-                        dismissKeyboard()
-                        onThemeModeChanged(themeMode)
-                    },
+                    onClick = { onThemeModeChanged(themeMode) },
                     enabled = !uiState.isWorking,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1216,10 +1152,7 @@ private fun AppBehaviorSection(
             }
         }
         Button(
-            onClick = {
-                dismissKeyboard()
-                onSaveAppSettings()
-            },
+            onClick = onSaveAppSettings,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1235,7 +1168,6 @@ private fun NotificationSettingsSection(
     onErrorPopupDurationSecondsChanged: (String) -> Unit,
     onSaveNotificationSettings: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnSuccessPopupDurationSecondsChanged =
         rememberInteractionAwareValueChange(onSuccessPopupDurationSecondsChanged)
     val trackedOnErrorPopupDurationSecondsChanged =
@@ -1250,20 +1182,17 @@ private fun NotificationSettingsSection(
             onValueChange = trackedOnSuccessPopupDurationSecondsChanged,
             label = "Durée de la confirmation (secondes)",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.NUMERIC,
         )
         AppTextField(
             value = uiState.errorPopupDurationSecondsInput,
             onValueChange = trackedOnErrorPopupDurationSecondsChanged,
             label = "Durée de l'erreur (secondes)",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.NUMERIC,
         )
         Button(
-            onClick = {
-                dismissKeyboard()
-                onSaveNotificationSettings()
-            },
+            onClick = onSaveNotificationSettings,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1278,27 +1207,19 @@ private fun SystemToolsSection(
     onExportDebugReport: () -> Unit,
     onResetAllAppData: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-
     SettingsSection(
         title = "Outils système",
         description = "Utiliser les outils de maintenance pour le diagnostic et la récupération.",
     ) {
         OutlinedButton(
-            onClick = {
-                dismissKeyboard()
-                onExportDebugReport()
-            },
+            onClick = onExportDebugReport,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Exporter le rapport de diagnostic")
         }
         Button(
-            onClick = {
-                dismissKeyboard()
-                onResetAllAppData()
-            },
+            onClick = onResetAllAppData,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1315,7 +1236,6 @@ private fun ThemeColorsSection(
     onTertiaryColorChanged: (String) -> Unit,
     onSaveThemeColors: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnPrimaryColorChanged = rememberInteractionAwareValueChange(onPrimaryColorChanged)
     val trackedOnSecondaryColorChanged = rememberInteractionAwareValueChange(onSecondaryColorChanged)
     val trackedOnTertiaryColorChanged = rememberInteractionAwareValueChange(onTertiaryColorChanged)
@@ -1329,27 +1249,24 @@ private fun ThemeColorsSection(
             onValueChange = trackedOnPrimaryColorChanged,
             label = "Couleur primaire (#RRGGBB)",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         AppTextField(
             value = uiState.secondaryColorInput,
             onValueChange = trackedOnSecondaryColorChanged,
             label = "Couleur secondaire (#RRGGBB)",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         AppTextField(
             value = uiState.tertiaryColorInput,
             onValueChange = trackedOnTertiaryColorChanged,
             label = "Couleur tertiaire (#RRGGBB)",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            type = AppTextFieldType.SIMPLE,
         )
         Button(
-            onClick = {
-                dismissKeyboard()
-                onSaveThemeColors()
-            },
+            onClick = onSaveThemeColors,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1366,7 +1283,6 @@ private fun SecuritySection(
     onConfirmPinChanged: (String) -> Unit,
     onChangeNormalPin: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnCurrentPinChanged = rememberInteractionAwareValueChange(onCurrentPinChanged)
     val trackedOnNewPinChanged = rememberInteractionAwareValueChange(onNewPinChanged)
     val trackedOnConfirmPinChanged = rememberInteractionAwareValueChange(onConfirmPinChanged)
@@ -1385,9 +1301,7 @@ private fun SecuritySection(
                 onValueChange = trackedOnCurrentPinChanged,
                 label = "PIN actuel",
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                visualTransformation = PasswordVisualTransformation(),
+                type = AppTextFieldType.NUMERIC,
             )
         }
         AppTextField(
@@ -1395,24 +1309,17 @@ private fun SecuritySection(
             onValueChange = trackedOnNewPinChanged,
             label = "Nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         AppTextField(
             value = uiState.confirmPinInput,
             onValueChange = trackedOnConfirmPinChanged,
             label = "Confirmer le PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         Button(
-            onClick = {
-                dismissKeyboard()
-                onChangeNormalPin()
-            },
+            onClick = onChangeNormalPin,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1429,7 +1336,6 @@ private fun AdvancedAccessSection(
     onSuperAdminConfirmPinChanged: (String) -> Unit,
     onChangeSuperAdminPin: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     val trackedOnSuperAdminCurrentPinChanged = rememberInteractionAwareValueChange(onSuperAdminCurrentPinChanged)
     val trackedOnSuperAdminNewPinChanged = rememberInteractionAwareValueChange(onSuperAdminNewPinChanged)
     val trackedOnSuperAdminConfirmPinChanged = rememberInteractionAwareValueChange(onSuperAdminConfirmPinChanged)
@@ -1443,33 +1349,24 @@ private fun AdvancedAccessSection(
             onValueChange = trackedOnSuperAdminCurrentPinChanged,
             label = "PIN actuel",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         AppTextField(
             value = uiState.superAdminNewPinInput,
             onValueChange = trackedOnSuperAdminNewPinChanged,
             label = "Nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         AppTextField(
             value = uiState.superAdminConfirmPinInput,
             onValueChange = trackedOnSuperAdminConfirmPinChanged,
             label = "Confirmer le nouveau PIN",
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
+            type = AppTextFieldType.NUMERIC,
         )
         Button(
-            onClick = {
-                dismissKeyboard()
-                onChangeSuperAdminPin()
-            },
+            onClick = onChangeSuperAdminPin,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1493,7 +1390,6 @@ private fun ImportExportSection(
     onExportAllSessions: () -> Unit,
     onExportFilteredSessions: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
     var showFilters by remember { mutableStateOf(false) }
     var showFromDatePicker by remember { mutableStateOf(false) }
     var showToDatePicker by remember { mutableStateOf(false) }
@@ -1519,10 +1415,7 @@ private fun ImportExportSection(
         description = "Exporter toutes les sessions, ou seulement celles qui correspondent aux filtres sélectionnés.",
     ) {
         OutlinedButton(
-            onClick = {
-                dismissKeyboard()
-                showFilters = !showFilters
-            },
+            onClick = { showFilters = !showFilters },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (showFilters) "Masquer les filtres" else "Afficher les filtres")
@@ -1540,10 +1433,7 @@ private fun ImportExportSection(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 AppSelectorFieldButton(
-                    onClick = {
-                        dismissKeyboard()
-                        showFromDatePicker = true
-                    },
+                    onClick = { showFromDatePicker = true },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
@@ -1555,10 +1445,7 @@ private fun ImportExportSection(
                     )
                 }
                 AppSelectorFieldButton(
-                    onClick = {
-                        dismissKeyboard()
-                        showToDatePicker = true
-                    },
+                    onClick = { showToDatePicker = true },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
@@ -1580,7 +1467,6 @@ private fun ImportExportSection(
                 emptyLabel = "Aucun bateau disponible pour l'export.",
                 noResultsLabel = "Aucun bateau ne correspond à la recherche actuelle.",
                 onOptionToggled = { selectedKey ->
-                    dismissKeyboard()
                     val boatId = selectedKey.toLongOrNull() ?: return@SearchableSelectableList
                     onExportBoatSelected(boatId, boatId !in uiState.selectedExportBoatIds)
                 },
@@ -1601,7 +1487,6 @@ private fun ImportExportSection(
                 emptyLabel = "Aucun rameur disponible pour l'export.",
                 noResultsLabel = "Aucun rameur ne correspond à la recherche actuelle.",
                 onOptionToggled = { selectedKey ->
-                    dismissKeyboard()
                     onExportRowerSelected(selectedKey, selectedKey !in uiState.selectedExportRowers)
                 },
             )
@@ -1621,7 +1506,6 @@ private fun ImportExportSection(
                 emptyLabel = "Aucune destination disponible pour l'export.",
                 noResultsLabel = "Aucune destination ne correspond à la recherche actuelle.",
                 onOptionToggled = { selectedKey ->
-                    dismissKeyboard()
                     onExportDestinationSelected(selectedKey, selectedKey !in uiState.selectedExportDestinations)
                 },
             )
@@ -1634,10 +1518,7 @@ private fun ImportExportSection(
 
             if (uiState.hasActiveExportFilters) {
                 OutlinedButton(
-                    onClick = {
-                        dismissKeyboard()
-                        onClearExportFilters()
-                    },
+                    onClick = onClearExportFilters,
                     enabled = !uiState.isWorking,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1647,10 +1528,7 @@ private fun ImportExportSection(
         }
 
         Button(
-            onClick = {
-                dismissKeyboard()
-                onExportAllSessions()
-            },
+            onClick = onExportAllSessions,
             enabled = !uiState.isWorking && uiState.exportableSessions.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1658,10 +1536,7 @@ private fun ImportExportSection(
         }
 
         Button(
-            onClick = {
-                dismissKeyboard()
-                onExportFilteredSessions()
-            },
+            onClick = onExportFilteredSessions,
             enabled = !uiState.isWorking && uiState.filteredExportableSessions.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1681,27 +1556,19 @@ private fun BackupSection(
     onExportBackup: () -> Unit,
     onRestoreBackup: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-
     SettingsSection(
         title = "Sauvegarde / Restauration",
         description = "Exporter la base de données dans un fichier ZIP ou restaurer une sauvegarde précédente.",
     ) {
         Button(
-            onClick = {
-                dismissKeyboard()
-                onExportBackup()
-            },
+            onClick = onExportBackup,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (uiState.isWorking) "Traitement..." else "Exporter la sauvegarde de la base (.zip)")
         }
         Button(
-            onClick = {
-                dismissKeyboard()
-                onRestoreBackup()
-            },
+            onClick = onRestoreBackup,
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1895,8 +1762,6 @@ private fun EditableListRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val dismissKeyboard = rememberDismissKeyboardAction()
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -1927,19 +1792,13 @@ private fun EditableListRow(
                 }
             }
             OutlinedButton(
-                onClick = {
-                    dismissKeyboard()
-                    onEdit()
-                },
+                onClick = onEdit,
                 enabled = enabled,
             ) {
                 Text("Modifier")
             }
             OutlinedButton(
-                onClick = {
-                    dismissKeyboard()
-                    onDelete()
-                },
+                onClick = onDelete,
                 enabled = enabled,
             ) {
                 Text("Supprimer")
