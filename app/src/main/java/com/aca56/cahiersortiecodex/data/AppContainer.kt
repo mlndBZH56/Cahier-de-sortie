@@ -10,6 +10,7 @@ import java.util.Date
 import java.util.Locale
 import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
 import com.aca56.cahiersortiecodex.data.crew.CrewStore
+import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.AppDatabase
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
 import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
@@ -45,6 +46,9 @@ class AppContainer(context: Context) {
     }
     val crewStore: CrewStore by lazy {
         CrewStore(appContext)
+    }
+    val appLogStore: AppLogStore by lazy {
+        AppLogStore(appContext)
     }
     val backupManager: DatabaseBackupManager by lazy {
         DatabaseBackupManager(

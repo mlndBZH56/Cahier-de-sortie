@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.crew.CrewStore
+import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
@@ -179,6 +180,7 @@ class NewSessionViewModel(
     private val boatPhotoStorage: BoatPhotoStorage,
     private val appPreferencesStore: AppPreferencesStore,
     private val crewStore: CrewStore,
+    private val appLogStore: AppLogStore,
     private val sessionId: Long? = null,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(NewSessionUiState(editingSessionId = sessionId))
@@ -366,6 +368,10 @@ class NewSessionViewModel(
             runCatching {
                 uris.map { uri -> boatPhotoStorage.importCompressedPhoto(uri) }
             }.onSuccess { paths ->
+                appLogStore.logAction(
+                    actionType = "Ajout de photos",
+                    details = "Ajout de ${paths.size} photo(s) à la remarque de session en cours de saisie.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         sessionRemarkPhotoPaths = (it.sessionRemarkPhotoPaths + paths).distinct(),
@@ -375,6 +381,10 @@ class NewSessionViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec d'enregistrement de session",
+                    details = "La session n'a pas pu être enregistrée.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         errorMessage = "Impossible d'ajouter les photos à la remarque.",
@@ -391,6 +401,10 @@ class NewSessionViewModel(
             runCatching {
                 boatPhotoStorage.saveCompressedBitmap(bitmap)
             }.onSuccess { path ->
+                appLogStore.logAction(
+                    actionType = "Ajout de photo",
+                    details = "Ajout d'une photo à la remarque de session en cours de saisie.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         sessionRemarkPhotoPaths = (it.sessionRemarkPhotoPaths + path).distinct(),
@@ -413,6 +427,10 @@ class NewSessionViewModel(
 
     fun removeSessionRemarkPhoto(path: String) {
         boatPhotoStorage.deletePhoto(path)
+        appLogStore.logAction(
+            actionType = "Suppression de photo",
+            details = "Suppression d'une photo de la remarque de session en cours de saisie.",
+        )
         uiStateMutable.update {
             it.copy(
                 sessionRemarkPhotoPaths = it.sessionRemarkPhotoPaths - path,
@@ -777,6 +795,17 @@ class NewSessionViewModel(
                     existingLinkedRemark?.let { remarkRepository.deleteRemark(it) }
                 }
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = if (currentState.isEditMode) "Modification de session" else "Création de session",
+                    details = buildString {
+                        append(if (currentState.isQuickMode && !currentState.isEditMode) "Sortie rapide" else "Session")
+                        append(" enregistrée pour le bateau ${selectedBoat.name}. ")
+                        append("${currentState.totalSelectedRowers} rameur(s) sélectionné(s).")
+                        if (currentState.sessionRemarkStatus == RemarkStatus.REPAIR_NEEDED) {
+                            append(" Une remarque de réparation a été créée.")
+                        }
+                    },
+                )
                 uiStateMutable.update { state ->
                     if (state.isEditMode) {
                         state.copy(
@@ -1123,6 +1152,7 @@ class NewSessionViewModel(
             boatPhotoStorage: BoatPhotoStorage,
             appPreferencesStore: AppPreferencesStore,
             crewStore: CrewStore,
+            appLogStore: AppLogStore,
             sessionId: Long? = null,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
@@ -1137,6 +1167,7 @@ class NewSessionViewModel(
                         boatPhotoStorage = boatPhotoStorage,
                         appPreferencesStore = appPreferencesStore,
                         crewStore = crewStore,
+                        appLogStore = appLogStore,
                         sessionId = sessionId,
                     ) as T
                 }

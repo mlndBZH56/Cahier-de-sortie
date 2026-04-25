@@ -1,14 +1,16 @@
 package com.aca56.cahiersortiecodex.ui.components
 
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import kotlinx.coroutines.delay
 
@@ -56,30 +58,35 @@ fun FeedbackDialog(
         MaterialTheme.colorScheme.onSecondaryContainer
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = containerColor,
-        titleContentColor = contentColor,
-        textContentColor = contentColor,
-        title = {
-            Text(
-                text = if (type == FeedbackDialogType.ERROR) "Erreur" else "Confirmation",
-                color = titleColor,
+    AppModalDialog(
+        title = if (type == FeedbackDialogType.ERROR) "Erreur" else "Confirmation",
+        onDismiss = onDismiss,
+        accentColor = titleColor,
+        buttons = {
+            AppDialogActionRow(
+                confirmLabel = "OK",
+                onConfirm = onDismiss,
+                onDismiss = onDismiss,
+                dismissLabel = "Fermer",
+                confirmContainerColor = titleColor,
+                confirmContentColor = if (type == FeedbackDialogType.ERROR) {
+                    MaterialTheme.colorScheme.onError
+                } else {
+                    MaterialTheme.colorScheme.onPrimary
+                },
             )
         },
-        text = {
+    ) {
+        androidx.compose.material3.Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = containerColor,
+            shape = MaterialTheme.shapes.large,
+        ) {
             Text(
                 text = message,
                 color = contentColor,
+                modifier = Modifier.padding(16.dp),
             )
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "OK",
-                    color = titleColor,
-                )
-            }
-        },
-    )
+        }
+    }
 }

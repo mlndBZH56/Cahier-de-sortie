@@ -37,6 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
+import com.aca56.cahiersortiecodex.data.logging.AppLogDatePreset
+import com.aca56.cahiersortiecodex.data.logging.AppLogExportFilters
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
@@ -46,6 +49,9 @@ import com.aca56.cahiersortiecodex.ui.components.AppTextField
 import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
 import com.aca56.cahiersortiecodex.ui.components.AppDatePickerDialog
+import com.aca56.cahiersortiecodex.ui.components.AppDialogActionRow
+import com.aca56.cahiersortiecodex.ui.components.AppModalDialog
+import com.aca56.cahiersortiecodex.ui.components.ExportActionButton
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
@@ -70,6 +76,7 @@ fun SettingsRoute(
     var pendingSingleBoatExportId by remember { mutableStateOf<Long?>(null) }
     var pendingRemarksRepairsOnly by remember { mutableStateOf(false) }
     var pendingRemarksBoatId by remember { mutableStateOf<Long?>(null) }
+    var pendingLogFilters by remember { mutableStateOf(AppLogExportFilters()) }
 
     val restoreLauncher = rememberLauncherForActivityResult(
         contract = OpenDocument(),
@@ -90,6 +97,15 @@ fun SettingsRoute(
         contract = CreateDocument("application/zip"),
     ) { uri ->
         uri?.let(viewModel::exportAllBoats) ?: viewModel.clearMessage()
+    }
+    val logsExportLauncher = rememberLauncherForActivityResult(
+        contract = CreateDocument("text/csv"),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportLogs(uri, pendingLogFilters)
+        } else {
+            viewModel.clearMessage()
+        }
     }
     val singleBoatExportLauncher = rememberLauncherForActivityResult(
         contract = CreateDocument("application/zip"),
@@ -196,6 +212,11 @@ fun SettingsRoute(
             viewModel.clearMessage()
             allBoatsExportLauncher.launch(defaultBoatSheetsExportFileName())
         },
+        onExportLogs = { filters ->
+            pendingLogFilters = filters
+            viewModel.clearMessage()
+            logsExportLauncher.launch(defaultLogsExportFileName())
+        },
         onExportSingleBoat = { boatId ->
             pendingSingleBoatExportId = boatId
             viewModel.clearMessage()
@@ -290,6 +311,7 @@ fun SettingsScreen(
     onExportFullDatabase: () -> Unit,
     onExportSessions: () -> Unit,
     onExportAllBoats: () -> Unit,
+    onExportLogs: (AppLogExportFilters) -> Unit,
     onExportSingleBoat: (Long) -> Unit,
     onExportRemarks: (Boolean, Long?) -> Unit,
     onExportRowers: () -> Unit,
@@ -376,6 +398,7 @@ fun SettingsScreen(
             onExportFullDatabase = onExportFullDatabase,
             onExportSessions = onExportSessions,
             onExportAllBoats = onExportAllBoats,
+            onExportLogs = onExportLogs,
             onExportSingleBoat = onExportSingleBoat,
             onExportRemarks = onExportRemarks,
             onExportRowers = onExportRowers,
@@ -390,24 +413,24 @@ fun SettingsScreen(
     }
 
     if (uiState.showRestartAfterRestore) {
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
-            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
-            title = { Text("Redémarrage requis") },
-            text = { Text("Redémarrer l'application pour appliquer les modifications") },
-            confirmButton = {
-                Button(
+        AppModalDialog(
+            title = "Redémarrage requis",
+            onDismiss = {},
+            accentColor = MaterialTheme.colorScheme.error,
+            dismissOnBackPress = false,
+            buttons = {
+                ExportActionButton(
+                    text = "Fermer l'application",
                     onClick = {
                         onDismissRestartAfterRestore()
                         (context as? Activity)?.finishAffinity()
                     },
-                ) {
-                    Text("Fermer l'application")
-                }
+                    enabled = true,
+                )
             },
-        )
+        ) {
+            Text("Redémarrer l'application pour appliquer les modifications")
+        }
     }
 
     uiState.message?.let { message ->
@@ -592,6 +615,7 @@ private fun SettingsContent(
     onExportFullDatabase: () -> Unit,
     onExportSessions: () -> Unit,
     onExportAllBoats: () -> Unit,
+    onExportLogs: (AppLogExportFilters) -> Unit,
     onExportSingleBoat: (Long) -> Unit,
     onExportRemarks: (Boolean, Long?) -> Unit,
     onExportRowers: () -> Unit,
@@ -608,322 +632,190 @@ private fun SettingsContent(
     var resetPinInput by remember { mutableStateOf("") }
     var cleanupPinInput by remember { mutableStateOf("") }
     var showSessionsExportDialog by remember { mutableStateOf(false) }
-    var showRemarksExportDialog by remember { mutableStateOf(false) }
-    var showSingleBoatExportDialog by remember { mutableStateOf(false) }
+    var showLogsExportDialog by remember { mutableStateOf(false) }
     var showExportDateFromPicker by remember { mutableStateOf(false) }
     var showExportDateToPicker by remember { mutableStateOf(false) }
-    var remarksRepairsOnly by remember { mutableStateOf(false) }
-    var remarksBoatSearchQuery by remember { mutableStateOf("") }
-    var selectedRemarksBoatId by remember { mutableStateOf<Long?>(null) }
-    var singleBoatSearchQuery by remember { mutableStateOf("") }
-    var selectedSingleBoatId by remember { mutableStateOf<Long?>(null) }
+    var selectedLogCategories by remember { mutableStateOf(AppLogCategory.values().toSet()) }
+    var selectedLogDatePreset by remember { mutableStateOf(AppLogDatePreset.LAST_7_DAYS) }
+    var logCustomDateFrom by remember { mutableStateOf("") }
+    var logCustomDateTo by remember { mutableStateOf("") }
+    var showLogDateFromPicker by remember { mutableStateOf(false) }
+    var showLogDateToPicker by remember { mutableStateOf(false) }
 
     if (showResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
-            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
-            title = { Text("Réinitialiser les données") },
-            text = { Text("Voulez-vous vraiment réinitialiser toutes les données de l'application ?") },
-            confirmButton = {
-                Button(
-                    onClick = {
+        AppModalDialog(
+            title = "Réinitialiser les données",
+            onDismiss = { showResetDialog = false },
+            accentColor = MaterialTheme.colorScheme.error,
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Continuer",
+                    onConfirm = {
                         showResetDialog = false
                         resetPinInput = ""
                         showResetPinDialog = true
                     },
-                ) {
-                    Text("Continuer")
-                }
+                    onDismiss = { showResetDialog = false },
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
-                    Text("Annuler")
-                }
-            },
-        )
+        ) {
+            Text("Voulez-vous vraiment réinitialiser toutes les données de l'application ?")
+        }
     }
 
     if (showResetPinDialog) {
-        AlertDialog(
-            onDismissRequest = {
+        AppModalDialog(
+            title = "Confirmation finale",
+            onDismiss = {
                 showResetPinDialog = false
                 resetPinInput = ""
             },
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
-            textContentColor = MaterialTheme.colorScheme.onErrorContainer,
-            title = { Text("Confirmation finale") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("Saisissez le code PIN super administrateur pour confirmer définitivement la réinitialisation.")
-                    AppTextField(
-                        value = resetPinInput,
-                        onValueChange = { resetPinInput = it.filter(Char::isDigit) },
-                        label = "Code PIN super administrateur",
-                        modifier = Modifier.fillMaxWidth(),
-                        type = AppTextFieldType.PIN,
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
+            accentColor = MaterialTheme.colorScheme.error,
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Réinitialiser",
+                    onConfirm = {
                         if (onResetAllAppData(resetPinInput)) {
                             showResetPinDialog = false
                             resetPinInput = ""
                         }
                     },
-                    enabled = !uiState.isWorking,
-                ) {
-                    Text("Réinitialiser")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
+                    onDismiss = {
                         showResetPinDialog = false
                         resetPinInput = ""
                     },
-                ) {
-                    Text("Annuler")
-                }
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                    confirmEnabled = !uiState.isWorking,
+                )
             },
-        )
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Saisissez le code PIN super administrateur pour confirmer définitivement la réinitialisation.")
+                AppTextField(
+                    value = resetPinInput,
+                    onValueChange = { resetPinInput = it.filter(Char::isDigit) },
+                    label = "Code PIN super administrateur",
+                    modifier = Modifier.fillMaxWidth(),
+                    type = AppTextFieldType.PIN,
+                )
+            }
+        }
     }
 
     uiState.cleanupPreview?.let { preview ->
-        AlertDialog(
-            onDismissRequest = {
+        AppModalDialog(
+            title = "Confirmer le nettoyage",
+            onDismiss = {
                 cleanupPinInput = ""
                 onDismissCleanupPreview()
             },
-            title = { Text("Confirmer le nettoyage") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        "Éléments à supprimer avant le ${formatDateForDisplay(preview.cutoffDate)} : ${preview.sessionsCount} sortie(s), ${preview.remarksCount} remarque(s).",
-                    )
-                    AppTextField(
-                        value = cleanupPinInput,
-                        onValueChange = { cleanupPinInput = it.filter(Char::isDigit) },
-                        label = "Code PIN super administrateur",
-                        modifier = Modifier.fillMaxWidth(),
-                        type = AppTextFieldType.PIN,
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Supprimer",
+                    onConfirm = {
                         if (onPerformDataCleanup(cleanupPinInput)) {
                             cleanupPinInput = ""
                         }
                     },
-                    enabled = !uiState.isWorking,
-                ) {
-                    Text("Supprimer")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
+                    onDismiss = {
                         cleanupPinInput = ""
                         onDismissCleanupPreview()
                     },
-                ) {
-                    Text("Annuler")
-                }
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                    confirmEnabled = !uiState.isWorking,
+                )
             },
-        )
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "Éléments à supprimer avant le ${formatDateForDisplay(preview.cutoffDate)} : ${preview.sessionsCount} sortie(s), ${preview.remarksCount} remarque(s).",
+                )
+                AppTextField(
+                    value = cleanupPinInput,
+                    onValueChange = { cleanupPinInput = it.filter(Char::isDigit) },
+                    label = "Code PIN super administrateur",
+                    modifier = Modifier.fillMaxWidth(),
+                    type = AppTextFieldType.PIN,
+                )
+            }
+        }
     }
 
     if (showSessionsExportDialog) {
-        AlertDialog(
-            onDismissRequest = { showSessionsExportDialog = false },
-            title = { Text("Exporter les sorties") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+        AppModalDialog(
+            title = "Exporter les sorties",
+            onDismiss = { showSessionsExportDialog = false },
+            buttons = {
+                OutlinedButton(
+                    onClick = onClearExportFilters,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        "Appliquez un ou plusieurs filtres avant l'export CSV. Sans filtre, toutes les sorties seront exportées.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    SearchableSelectableList(
-                        searchQuery = uiState.exportBoatSearchQuery,
-                        onSearchQueryChanged = onExportBoatSearchQueryChanged,
-                        searchLabel = "Filtrer par bateau",
-                        selectedKeys = uiState.selectedExportBoatIds.mapTo(mutableSetOf()) { it.toString() },
-                        options = uiState.filteredExportBoatOptions,
-                        emptyLabel = "Aucun bateau disponible.",
-                        noResultsLabel = "Aucun bateau trouvé.",
-                        onOptionToggled = { key ->
-                            key.toLongOrNull()?.let { onExportBoatSelected(it, it !in uiState.selectedExportBoatIds) }
-                        },
-                    )
-                    SearchableSelectableList(
-                        searchQuery = uiState.exportRowerSearchQuery,
-                        onSearchQueryChanged = onExportRowerSearchQueryChanged,
-                        searchLabel = "Filtrer par rameur",
-                        selectedKeys = uiState.selectedExportRowers,
-                        options = uiState.filteredExportRowerOptions,
-                        emptyLabel = "Aucun rameur disponible.",
-                        noResultsLabel = "Aucun rameur trouvé.",
-                        onOptionToggled = { key ->
-                            onExportRowerSelected(key, key !in uiState.selectedExportRowers)
-                        },
-                    )
-                    AppSelectorFieldButton(
-                        onClick = { showExportDateFromPicker = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Date de début : ${uiState.exportDateFrom.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}")
-                    }
-                    AppSelectorFieldButton(
-                        onClick = { showExportDateToPicker = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Date de fin : ${uiState.exportDateTo.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}")
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = onClearExportFilters,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("Réinitialiser")
-                        }
-                        Button(
-                            onClick = {
-                                showSessionsExportDialog = false
-                                onExportSessions()
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("Exporter")
-                        }
-                    }
+                    Text("Réinitialiser les filtres")
                 }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showSessionsExportDialog = false }) {
-                    Text("Fermer")
-                }
-            },
-        )
-    }
-
-    if (showRemarksExportDialog) {
-        val boatOptions = uiState.boatManagement.boats
-            .sortedBy { it.name.lowercase() }
-            .map { SearchableSelectableOption(key = it.id.toString(), label = it.name) }
-        AlertDialog(
-            onDismissRequest = { showRemarksExportDialog = false },
-            title = { Text("Exporter les remarques") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Réparations uniquement")
-                            Text(
-                                "Activez pour n’exporter que les remarques de maintenance.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = remarksRepairsOnly,
-                            onCheckedChange = { remarksRepairsOnly = it },
-                        )
-                    }
-                    SearchableSingleSelectList(
-                        searchQuery = remarksBoatSearchQuery,
-                        onSearchQueryChanged = { remarksBoatSearchQuery = it },
-                        searchLabel = "Filtrer par bateau",
-                        selectedKey = selectedRemarksBoatId?.toString(),
-                        options = boatOptions,
-                        emptyLabel = "Aucun bateau disponible.",
-                        noResultsLabel = "Aucun bateau trouvé.",
-                        onOptionSelected = { key ->
-                            selectedRemarksBoatId = key.toLongOrNull()
-                        },
-                    )
-                    OutlinedButton(
-                        onClick = { selectedRemarksBoatId = null },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Tous les bateaux")
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showRemarksExportDialog = false
-                        onExportRemarks(remarksRepairsOnly, selectedRemarksBoatId)
+                AppDialogActionRow(
+                    confirmLabel = "Exporter",
+                    onConfirm = {
+                        showSessionsExportDialog = false
+                        onExportSessions()
                     },
-                ) {
-                    Text("Exporter")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRemarksExportDialog = false }) {
-                    Text("Annuler")
-                }
-            },
-        )
-    }
-
-    if (showSingleBoatExportDialog) {
-        val boatOptions = uiState.boatManagement.boats
-            .sortedBy { it.name.lowercase() }
-            .map { SearchableSelectableOption(key = it.id.toString(), label = it.name) }
-        AlertDialog(
-            onDismissRequest = { showSingleBoatExportDialog = false },
-            title = { Text("Exporter un bateau") },
-            text = {
-                SearchableSingleSelectList(
-                    searchQuery = singleBoatSearchQuery,
-                    onSearchQueryChanged = { singleBoatSearchQuery = it },
-                    searchLabel = "Sélectionner un bateau",
-                    selectedKey = selectedSingleBoatId?.toString(),
-                    options = boatOptions,
-                    emptyLabel = "Aucun bateau disponible.",
-                    noResultsLabel = "Aucun bateau trouvé.",
-                    onOptionSelected = { key ->
-                        selectedSingleBoatId = key.toLongOrNull()
-                    },
+                    dismissLabel = "Fermer",
+                    onDismiss = { showSessionsExportDialog = false },
                 )
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        selectedSingleBoatId?.let {
-                            showSingleBoatExportDialog = false
-                            onExportSingleBoat(it)
-                        }
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "Appliquez un ou plusieurs filtres avant l'export CSV. Sans filtre, toutes les sorties seront exportées.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SearchableSelectableList(
+                    searchQuery = uiState.exportBoatSearchQuery,
+                    onSearchQueryChanged = onExportBoatSearchQueryChanged,
+                    searchLabel = "Filtrer par bateau",
+                    selectedKeys = uiState.selectedExportBoatIds.mapTo(mutableSetOf()) { it.toString() },
+                    options = uiState.filteredExportBoatOptions,
+                    emptyLabel = "Aucun bateau disponible.",
+                    noResultsLabel = "Aucun bateau trouvé.",
+                    onOptionToggled = { key ->
+                        key.toLongOrNull()?.let { onExportBoatSelected(it, it !in uiState.selectedExportBoatIds) }
                     },
-                    enabled = selectedSingleBoatId != null,
+                )
+                SearchableSelectableList(
+                    searchQuery = uiState.exportRowerSearchQuery,
+                    onSearchQueryChanged = onExportRowerSearchQueryChanged,
+                    searchLabel = "Filtrer par rameur",
+                    selectedKeys = uiState.selectedExportRowers,
+                    options = uiState.filteredExportRowerOptions,
+                    emptyLabel = "Aucun rameur disponible.",
+                    noResultsLabel = "Aucun rameur trouvé.",
+                    onOptionToggled = { key ->
+                        onExportRowerSelected(key, key !in uiState.selectedExportRowers)
+                    },
+                )
+                AppSelectorFieldButton(
+                    onClick = { showExportDateFromPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Exporter")
+                    Text("Date de début : ${uiState.exportDateFrom.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSingleBoatExportDialog = false }) {
-                    Text("Annuler")
+                AppSelectorFieldButton(
+                    onClick = { showExportDateToPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Date de fin : ${uiState.exportDateTo.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}")
                 }
-            },
-        )
+            }
+        }
     }
 
     if (showExportDateFromPicker) {
@@ -947,6 +839,127 @@ private fun SettingsContent(
             },
         )
     }
+
+    if (showLogsExportDialog) {
+        AppModalDialog(
+            title = "Exporter les logs",
+            onDismiss = { showLogsExportDialog = false },
+            buttons = {
+                OutlinedButton(
+                    onClick = {
+                        selectedLogCategories = AppLogCategory.values().toSet()
+                        selectedLogDatePreset = AppLogDatePreset.LAST_7_DAYS
+                        logCustomDateFrom = ""
+                        logCustomDateTo = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Réinitialiser les filtres")
+                }
+                AppDialogActionRow(
+                    confirmLabel = "Exporter",
+                    onConfirm = {
+                        showLogsExportDialog = false
+                        onExportLogs(
+                            AppLogExportFilters(
+                                categories = selectedLogCategories,
+                                preset = selectedLogDatePreset,
+                                customFromDate = logCustomDateFrom,
+                                customToDate = logCustomDateTo,
+                            ),
+                        )
+                    },
+                    dismissLabel = "Fermer",
+                    onDismiss = { showLogsExportDialog = false },
+                    confirmEnabled = !uiState.isWorking && selectedLogCategories.isNotEmpty(),
+                )
+            },
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "Choisissez une ou plusieurs catégories, puis une période d'export.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Catégories",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                AppLogCategory.values().forEach { category ->
+                    CleanupToggleButton(
+                        label = category.label,
+                        selected = category in selectedLogCategories,
+                        onClick = {
+                            selectedLogCategories = if (category in selectedLogCategories) {
+                                selectedLogCategories - category
+                            } else {
+                                selectedLogCategories + category
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                Text(
+                    "Période",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                AppLogDatePreset.values().forEach { preset ->
+                    CleanupToggleButton(
+                        label = preset.label,
+                        selected = preset == selectedLogDatePreset,
+                        onClick = { selectedLogDatePreset = preset },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                if (selectedLogDatePreset == AppLogDatePreset.CUSTOM) {
+                    AppSelectorFieldButton(
+                        onClick = { showLogDateFromPicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Date de début : ${logCustomDateFrom.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}",
+                        )
+                    }
+                    AppSelectorFieldButton(
+                        onClick = { showLogDateToPicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Date de fin : ${logCustomDateTo.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Toutes"}",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showLogDateFromPicker) {
+        AppDatePickerDialog(
+            storageDate = logCustomDateFrom.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { showLogDateFromPicker = false },
+            onDateSelected = { selectedDate ->
+                logCustomDateFrom = selectedDate
+                showLogDateFromPicker = false
+            },
+        )
+    }
+
+    if (showLogDateToPicker) {
+        AppDatePickerDialog(
+            storageDate = logCustomDateTo.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { showLogDateToPicker = false },
+            onDateSelected = { selectedDate ->
+                logCustomDateTo = selectedDate
+                showLogDateToPicker = false
+            },
+        )
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -992,20 +1005,7 @@ private fun SettingsContent(
                             DataExportSection(
                                 uiState = uiState,
                                 onOpenSessionsExport = { showSessionsExportDialog = true },
-                                onOpenSingleBoatExport = {
-                                    singleBoatSearchQuery = ""
-                                    selectedSingleBoatId = null
-                                    showSingleBoatExportDialog = true
-                                },
-                                onOpenRemarksExport = {
-                                    remarksBoatSearchQuery = ""
-                                    selectedRemarksBoatId = null
-                                    remarksRepairsOnly = false
-                                    showRemarksExportDialog = true
-                                },
                                 onExportAllBoats = onExportAllBoats,
-                                onExportRowers = onExportRowers,
-                                onExportCrews = onExportCrews,
                             )
 
                             SectionHeader(
@@ -1064,6 +1064,7 @@ private fun SettingsContent(
                                 SystemToolsSection(
                                     uiState = uiState,
                                     onResetAllAppData = { showResetDialog = true },
+                                    onExportLogs = { showLogsExportDialog = true },
                                 )
                                 DataCleanupSection(
                                     uiState = uiState,
@@ -1096,20 +1097,7 @@ private fun SettingsContent(
                     DataExportSection(
                         uiState = uiState,
                         onOpenSessionsExport = { showSessionsExportDialog = true },
-                        onOpenSingleBoatExport = {
-                            singleBoatSearchQuery = ""
-                            selectedSingleBoatId = null
-                            showSingleBoatExportDialog = true
-                        },
-                        onOpenRemarksExport = {
-                            remarksBoatSearchQuery = ""
-                            selectedRemarksBoatId = null
-                            remarksRepairsOnly = false
-                            showRemarksExportDialog = true
-                        },
                         onExportAllBoats = onExportAllBoats,
-                        onExportRowers = onExportRowers,
-                        onExportCrews = onExportCrews,
                     )
 
                     SectionHeader(
@@ -1163,6 +1151,7 @@ private fun SettingsContent(
                         SystemToolsSection(
                             uiState = uiState,
                             onResetAllAppData = { showResetDialog = true },
+                            onExportLogs = { showLogsExportDialog = true },
                         )
                         DataCleanupSection(
                             uiState = uiState,
@@ -1648,11 +1637,17 @@ private fun NotificationSettingsSection(
 private fun SystemToolsSection(
     uiState: SettingsUiState,
     onResetAllAppData: () -> Unit,
+    onExportLogs: (AppLogExportFilters) -> Unit,
 ) {
     SettingsSection(
         title = "Outils système",
         description = "Utiliser les outils de maintenance pour le diagnostic et la récupération.",
     ) {
+        ExportActionButton(
+            text = if (uiState.isWorking) "Traitement..." else "Exporter les logs",
+            onClick = { onExportLogs(AppLogExportFilters()) },
+            enabled = !uiState.isWorking,
+        )
         Button(
             onClick = onResetAllAppData,
             enabled = !uiState.isWorking,
@@ -1923,60 +1918,22 @@ private fun AdvancedAccessSection(
 private fun DataExportSection(
     uiState: SettingsUiState,
     onOpenSessionsExport: () -> Unit,
-    onOpenSingleBoatExport: () -> Unit,
-    onOpenRemarksExport: () -> Unit,
     onExportAllBoats: () -> Unit,
-    onExportRowers: () -> Unit,
-    onExportCrews: () -> Unit,
 ) {
     SettingsSection(
         title = "Export de données",
         description = "Exporter des données ciblées sans remplacer la sauvegarde complète de l'application.",
     ) {
-        Button(
+        ExportActionButton(
+            text = "Exporter les sorties",
             onClick = onOpenSessionsExport,
             enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Exporter les sorties")
-        }
-        Button(
+        )
+        ExportActionButton(
+            text = "Exporter les bateaux",
             onClick = onExportAllBoats,
             enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Exporter tous les bateaux")
-        }
-        OutlinedButton(
-            onClick = onOpenSingleBoatExport,
-            enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Exporter un bateau")
-        }
-        Button(
-            onClick = onOpenRemarksExport,
-            enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Exporter les remarques")
-        }
-        Button(
-            onClick = onExportRowers,
-            enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Exporter les rameurs")
-        }
-        if (uiState.crewsEnabled) {
-            Button(
-                onClick = onExportCrews,
-                enabled = !uiState.isWorking,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Exporter les équipages")
-            }
-        }
+        )
     }
 }
 
@@ -1990,20 +1947,16 @@ private fun BackupSection(
         title = "Sauvegarde & restauration",
         description = "Exporter la base complète ou restaurer une sauvegarde précédente.",
     ) {
-        Button(
+        ExportActionButton(
+            text = if (uiState.isWorking) "Traitement..." else "Exporter la base de données complète",
             onClick = onExportFullDatabase,
             enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Exporter la base de données complète")
-        }
-        Button(
+        )
+        ExportActionButton(
+            text = if (uiState.isWorking) "Traitement..." else "Restaurer la base depuis un ZIP",
             onClick = onRestoreBackup,
             enabled = !uiState.isWorking,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Restaurer la base depuis un ZIP")
-        }
+        )
     }
 }
 
@@ -2192,6 +2145,18 @@ private fun EditableListRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var showDeleteDialog by remember(label) { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        com.aca56.cahiersortiecodex.ui.components.DeleteConfirmationDialog(
+            onConfirm = {
+                onDelete()
+                showDeleteDialog = false
+            },
+            onDismiss = { showDeleteDialog = false },
+        )
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -2228,7 +2193,7 @@ private fun EditableListRow(
                 Text("Modifier")
             }
             OutlinedButton(
-                onClick = onDelete,
+                onClick = { showDeleteDialog = true },
                 enabled = enabled,
             ) {
                 Text("Supprimer")
@@ -2250,6 +2215,11 @@ private fun defaultSessionsExportFileName(): String {
 private fun defaultBoatSheetsExportFileName(): String {
     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
     return "bateaux_export_$timestamp.zip"
+}
+
+private fun defaultLogsExportFileName(): String {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    return "journal_actions_$timestamp.csv"
 }
 
 private fun defaultSingleBoatExportFileName(): String {

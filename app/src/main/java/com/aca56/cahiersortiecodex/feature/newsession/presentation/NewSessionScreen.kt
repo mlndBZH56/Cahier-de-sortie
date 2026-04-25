@@ -81,6 +81,7 @@ fun NewSessionRoute(
             boatPhotoStorage = appContainer.boatPhotoStorage,
             appPreferencesStore = appContainer.appPreferencesStore,
             crewStore = appContainer.crewStore,
+            appLogStore = appContainer.appLogStore,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
@@ -172,6 +173,7 @@ fun EditSessionRoute(
             boatPhotoStorage = appContainer.boatPhotoStorage,
             appPreferencesStore = appContainer.appPreferencesStore,
             crewStore = appContainer.crewStore,
+            appLogStore = appContainer.appLogStore,
             sessionId = sessionId,
         ),
     )

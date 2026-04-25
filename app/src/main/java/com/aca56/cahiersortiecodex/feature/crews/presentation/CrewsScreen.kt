@@ -34,9 +34,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.crew.CrewStore
+import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.repository.RowerRepository
 import com.aca56.cahiersortiecodex.ui.components.AppTextField
 import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
+import com.aca56.cahiersortiecodex.ui.components.DeleteConfirmationDialog
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,6 +73,7 @@ data class CrewsUiState(
 class CrewsViewModel(
     private val crewStore: CrewStore,
     private val rowerRepository: RowerRepository,
+    private val appLogStore: AppLogStore,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(CrewsUiState())
     val uiState: StateFlow<CrewsUiState> = uiStateMutable.asStateFlow()
@@ -156,6 +159,10 @@ class CrewsViewModel(
             name = state.crewNameInput,
             rowerIds = state.selectedRowerIds.toList(),
         )
+        appLogStore.logAction(
+            actionType = if (state.editingCrewId == null) "Création d'équipage" else "Modification d'équipage",
+            details = "Équipage enregistré: ${state.crewNameInput} (${state.selectedRowerIds.size} rameur(s)).",
+        )
         uiStateMutable.update {
             it.copy(
                 isEditorDialogOpen = false,
@@ -170,6 +177,10 @@ class CrewsViewModel(
 
     fun deleteCrew(crewId: Long) {
         crewStore.deleteCrew(crewId)
+        appLogStore.logAction(
+            actionType = "Suppression d'équipage",
+            details = "Équipage supprimé: $crewId.",
+        )
         uiStateMutable.update {
             if (it.editingCrewId == crewId) {
                 it.copy(
@@ -235,12 +246,14 @@ class CrewsViewModel(
         fun factory(
             crewStore: CrewStore,
             rowerRepository: RowerRepository,
+            appLogStore: AppLogStore,
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return CrewsViewModel(
                     crewStore = crewStore,
                     rowerRepository = rowerRepository,
+                    appLogStore = appLogStore,
                 ) as T
             }
         }
@@ -255,6 +268,7 @@ fun CrewsRoute(contentPadding: PaddingValues) {
         factory = CrewsViewModel.factory(
             crewStore = appContainer.crewStore,
             rowerRepository = appContainer.rowerRepository,
+            appLogStore = appContainer.appLogStore,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
@@ -302,25 +316,12 @@ fun CrewsScreen(
     }
 
     crewPendingDeleteId?.let { crewId ->
-        AlertDialog(
-            onDismissRequest = { crewPendingDeleteId = null },
-            title = { Text("Confirmer la suppression") },
-            text = { Text("Voulez-vous vraiment supprimer cet équipage ?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteCrew(crewId)
-                        crewPendingDeleteId = null
-                    },
-                ) {
-                    Text("Confirmer")
-                }
+        DeleteConfirmationDialog(
+            onConfirm = {
+                onDeleteCrew(crewId)
+                crewPendingDeleteId = null
             },
-            dismissButton = {
-                TextButton(onClick = { crewPendingDeleteId = null }) {
-                    Text("Annuler")
-                }
-            },
+            onDismiss = { crewPendingDeleteId = null },
         )
     }
 

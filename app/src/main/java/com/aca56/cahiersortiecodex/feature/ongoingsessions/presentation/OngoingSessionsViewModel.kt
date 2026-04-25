@@ -3,6 +3,7 @@ package com.aca56.cahiersortiecodex.feature.ongoingsessions.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
@@ -69,6 +70,7 @@ data class OngoingSessionsUiState(
 class OngoingSessionsViewModel(
     private val sessionRepository: SessionRepository,
     private val destinationRepository: DestinationRepository,
+    private val appLogStore: AppLogStore,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(OngoingSessionsUiState())
     val uiState: StateFlow<OngoingSessionsUiState> = uiStateMutable.asStateFlow()
@@ -283,6 +285,10 @@ class OngoingSessionsViewModel(
 
                 sessionRepository.updateSession(updatedSession)
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = "Clôture de session",
+                    details = "Session ${openedSession.boatName} terminée avec succès.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         openedSessionId = null,
@@ -298,6 +304,10 @@ class OngoingSessionsViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec de clôture de session",
+                    details = "La session ouverte n'a pas pu être terminée.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -364,6 +374,10 @@ class OngoingSessionsViewModel(
                     sessionRepository.updateSession(updatedSession)
                 }
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = "Clôture multiple de sessions",
+                    details = "${selectedSessions.size} session(s) terminée(s) en lot.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isBulkSelectionMode = false,
@@ -381,6 +395,10 @@ class OngoingSessionsViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec de clôture multiple",
+                    details = "Les sessions sélectionnées n'ont pas pu être terminées.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -406,6 +424,10 @@ class OngoingSessionsViewModel(
                     ?: error("Session introuvable.")
                 sessionRepository.deleteSession(sessionWithDetails.session)
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = "Suppression de session",
+                    details = "Session $openedSessionId supprimée depuis les sorties en cours.",
+                )
                 closeSessionDetails()
                 uiStateMutable.update {
                     it.copy(
@@ -414,6 +436,10 @@ class OngoingSessionsViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec de suppression de session",
+                    details = "La session ouverte n'a pas pu être supprimée.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -519,6 +545,7 @@ class OngoingSessionsViewModel(
         fun factory(
             sessionRepository: SessionRepository,
             destinationRepository: DestinationRepository,
+            appLogStore: AppLogStore,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -526,6 +553,7 @@ class OngoingSessionsViewModel(
                     return OngoingSessionsViewModel(
                         sessionRepository = sessionRepository,
                         destinationRepository = destinationRepository,
+                        appLogStore = appLogStore,
                     ) as T
                 }
             }

@@ -1,8 +1,7 @@
 package com.aca56.cahiersortiecodex.ui.components
 
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 
 @Composable
@@ -11,19 +10,19 @@ fun PhotoSourceChooserDialog(
     onTakePhoto: () -> Unit,
     onPickFromGallery: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Ajouter une photo") },
-        text = { Text("Choisissez la source de la photo.") },
-        confirmButton = {
-            TextButton(onClick = onTakePhoto) {
-                Text("Prendre une photo")
-            }
+    AppModalDialog(
+        title = "Ajouter une photo",
+        onDismiss = onDismiss,
+        accentColor = MaterialTheme.colorScheme.primary,
+        buttons = {
+            AppDialogActionRow(
+                confirmLabel = "Prendre une photo",
+                onConfirm = onTakePhoto,
+                dismissLabel = "Choisir depuis la galerie",
+                onDismiss = onPickFromGallery,
+            )
         },
-        dismissButton = {
-            TextButton(onClick = onPickFromGallery) {
-                Text("Choisir depuis la galerie")
-            }
-        },
-    )
+    ) {
+        Text("Choisissez la source de la photo.")
+    }
 }

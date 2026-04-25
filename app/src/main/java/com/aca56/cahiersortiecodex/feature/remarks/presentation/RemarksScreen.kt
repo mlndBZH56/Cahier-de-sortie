@@ -44,7 +44,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
@@ -59,6 +58,7 @@ import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.currentStorageDate
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
+import com.aca56.cahiersortiecodex.ui.components.AppModalDialog
 
 @Composable
 fun RemarksRoute(
@@ -75,6 +75,7 @@ fun RemarksRoute(
             boatRepository = appContainer.boatRepository,
             sessionRepository = appContainer.sessionRepository,
             boatPhotoStorage = appContainer.boatPhotoStorage,
+            appLogStore = appContainer.appLogStore,
             initialBoatId = initialBoatId,
             autoStartEditor = autoStartEditor,
         ),
@@ -1110,36 +1111,6 @@ private fun RepairUpdatePhotosDialog(
             }
         },
     )
-}
-
-@Composable
-private fun AppModalDialog(
-    title: String,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                content()
-            }
-        }
-    }
 }
 
 private fun RemarkStatus.displayLabel(): String {

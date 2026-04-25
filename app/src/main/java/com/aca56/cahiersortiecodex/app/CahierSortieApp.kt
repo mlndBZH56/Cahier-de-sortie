@@ -20,9 +20,9 @@ fun CahierSortieApp(
     onUserInteraction: () -> Unit,
 ) {
     val navController = rememberNavController()
-    val context = LocalContext.current
-    val appPreferences by (context.applicationContext as CahierSortieApplication)
-        .appContainer
+    val application = LocalContext.current.applicationContext as CahierSortieApplication
+    val appContainer = application.appContainer
+    val appPreferences by appContainer
         .appPreferencesStore
         .preferencesFlow
         .collectAsState()
@@ -33,6 +33,10 @@ fun CahierSortieApp(
     LaunchedEffect(currentRoute) {
         if (currentRoute != null) {
             onUserInteraction()
+            appContainer.appLogStore.logSystem(
+                actionType = "Changement d'écran",
+                details = "Navigation vers $currentRoute.",
+            )
         }
     }
 
@@ -45,6 +49,10 @@ fun CahierSortieApp(
             ?.route == AppDestination.Home.route
 
         if (!isOnHome) {
+            appContainer.appLogStore.logSystem(
+                actionType = "Retour accueil automatique",
+                details = "Retour à l'accueil après inactivité de ${appPreferences.inactivityTimeoutMillis / 60000.0} minute(s).",
+            )
             navController.navigate(AppDestination.Home.route) {
                 popUpTo(navController.graph.startDestinationId) {
                     inclusive = false

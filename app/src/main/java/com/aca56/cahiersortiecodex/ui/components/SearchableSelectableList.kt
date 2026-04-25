@@ -186,7 +186,9 @@ fun SearchableSelectableList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
+                        trackedOnSearchQueryChanged("")
                         onOptionToggled(option.key)
+                        visibleCount = InitialVisibleSelectionCount
                     }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -292,7 +294,9 @@ fun SearchableSingleSelectList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
+                        trackedOnSearchQueryChanged("")
                         onOptionSelected(option.key)
+                        visibleCount = InitialVisibleSelectionCount
                     }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

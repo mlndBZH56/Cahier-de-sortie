@@ -58,6 +58,7 @@ fun OngoingSessionsRoute(
         factory = OngoingSessionsViewModel.factory(
             sessionRepository = appContainer.sessionRepository,
             destinationRepository = appContainer.destinationRepository,
+            appLogStore = appContainer.appLogStore,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()

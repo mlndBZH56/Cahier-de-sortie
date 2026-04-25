@@ -1,8 +1,7 @@
 package com.aca56.cahiersortiecodex.ui.components
 
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 
 @Composable
@@ -12,10 +11,12 @@ fun DeleteConfirmationDialog(
 ) {
     ConfirmationDialog(
         title = "Supprimer",
-        message = "Êtes-vous sûr de vouloir supprimer ?",
+        message = "Confirmer la suppression ?",
         confirmLabel = "Supprimer",
         onConfirm = onConfirm,
         onDismiss = onDismiss,
+        confirmColor = MaterialTheme.colorScheme.error,
+        confirmContentColor = MaterialTheme.colorScheme.onError,
     )
 }
 
@@ -26,20 +27,26 @@ fun ConfirmationDialog(
     confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    confirmColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+    confirmContentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onPrimary,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(confirmLabel)
-            }
+    AppModalDialog(
+        title = title,
+        onDismiss = onDismiss,
+        accentColor = confirmColor,
+        buttons = {
+            AppDialogActionRow(
+                confirmLabel = confirmLabel,
+                onConfirm = onConfirm,
+                onDismiss = onDismiss,
+                confirmContainerColor = confirmColor,
+                confirmContentColor = confirmContentColor,
+            )
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Annuler")
-            }
-        },
-    )
+    ) {
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }

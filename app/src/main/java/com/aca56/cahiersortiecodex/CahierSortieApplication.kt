@@ -10,6 +10,10 @@ class CahierSortieApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         appContainer = AppContainer(this)
+        appContainer.appLogStore.logSystem(
+            actionType = "Démarrage de l'application",
+            details = "L'application a démarré avec succès.",
+        )
     }
 
     fun reloadAppContainer() {

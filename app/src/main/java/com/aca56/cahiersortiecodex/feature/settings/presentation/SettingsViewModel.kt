@@ -10,6 +10,7 @@ import com.aca56.cahiersortiecodex.data.export.DatabaseCsvExporter
 import com.aca56.cahiersortiecodex.data.export.SessionCsvExporter
 import com.aca56.cahiersortiecodex.data.importing.BoatImportParser
 import com.aca56.cahiersortiecodex.data.importing.RowerImportParser
+import com.aca56.cahiersortiecodex.data.logging.AppLogExportFilters
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
@@ -253,6 +254,7 @@ class SettingsViewModel(
 ) : ViewModel() {
     private var requirePinOnNextSettingsEntry = true
     private var isInsideSettingsArea = false
+    private val appLogStore = application.appContainer.appLogStore
 
     private val uiStateMutable = MutableStateFlow(
         SettingsUiState(hasPin = pinCodeStore.hasPin()),
@@ -422,6 +424,10 @@ class SettingsViewModel(
         }
 
         pinCodeStore.saveNormalPin(pin)
+        appLogStore.logSecurity(
+            actionType = "Création du PIN",
+            details = "Un nouveau code PIN standard a été enregistré.",
+        )
         uiStateMutable.update {
             it.copy(
                 hasPin = true,
@@ -443,10 +449,22 @@ class SettingsViewModel(
         val isNormalUser = pinCodeStore.verifyNormalPin(enteredPin)
 
         if (!isSuperAdmin && !isNormalUser) {
+            appLogStore.logSecurity(
+                actionType = "Échec de déverrouillage",
+                details = "Tentative d'accès aux paramètres avec un code PIN incorrect.",
+            )
             uiStateMutable.update { it.copy(message = "Le code PIN est incorrect. Veuillez réessayer.", messageType = FeedbackDialogType.ERROR) }
             return
         }
 
+        appLogStore.logSecurity(
+            actionType = if (isSuperAdmin) "Accès super administrateur" else "Accès paramètres",
+            details = if (isSuperAdmin) {
+                "Ouverture des paramètres avec le code super administrateur."
+            } else {
+                "Ouverture des paramètres avec le code PIN standard."
+            },
+        )
         uiStateMutable.update {
             it.copy(
                 isUnlocked = true,
@@ -484,6 +502,10 @@ class SettingsViewModel(
         }
 
         pinCodeStore.saveNormalPin(newPin)
+        appLogStore.logSecurity(
+            actionType = "Modification du PIN",
+            details = "Le code PIN standard des paramètres a été mis à jour.",
+        )
         uiStateMutable.update {
             it.copy(
                 currentPinInput = "",
@@ -525,6 +547,10 @@ class SettingsViewModel(
         }
 
         pinCodeStore.saveSuperAdminPin(newPin)
+        appLogStore.logSecurity(
+            actionType = "Modification du PIN super administrateur",
+            details = "Le code PIN super administrateur a été mis à jour.",
+        )
         uiStateMutable.update {
             it.copy(
                 superAdminCurrentPinInput = "",
@@ -547,6 +573,10 @@ class SettingsViewModel(
                     )
                 }
                 application.reloadAppContainer()
+                appLogStore.logSystem(
+                    actionType = "Restauration",
+                    details = "Restauration complète de la base depuis un fichier ZIP.",
+                )
             },
             onSuccess = {
                 it.copy(
@@ -714,6 +744,10 @@ class SettingsViewModel(
                         boatPhotos = application.appContainer.boatPhotoRepository.observePhotos().first(),
                     )
                 }
+                appLogStore.logAction(
+                    actionType = "Export complet",
+                    details = "Export complet de la base de données.",
+                )
             },
             onSuccessMessage = "La sauvegarde complète de l'application a été exportée avec succès.",
         )
@@ -731,6 +765,10 @@ class SettingsViewModel(
                         sessions = sessionsToExport,
                     )
                 }
+                appLogStore.logAction(
+                    actionType = "Export des sorties",
+                    details = "Export des sorties avec ${sessionsToExport.size} sortie(s).",
+                )
             },
             onSuccessMessage = "Les sorties ont été exportées avec succès.",
         )
@@ -756,8 +794,28 @@ class SettingsViewModel(
                         boatPhotos = boatPhotos,
                     )
                 }
+                appLogStore.logAction(
+                    actionType = "Export des bateaux",
+                    details = "Export de toutes les fiches bateaux.",
+                )
             },
             onSuccessMessage = "Les fiches bateaux ont été exportées avec succès.",
+        )
+    }
+
+    fun exportLogs(uri: Uri, filters: AppLogExportFilters) {
+        launchWork(
+            onErrorMessage = "Impossible d'exporter les logs.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    appLogStore.exportToUri(uri, filters)
+                }
+                appLogStore.logAction(
+                    actionType = "Export des logs",
+                    details = "Export des logs applicatifs avec ${filters.categories.size} catégorie(s) et le filtre ${filters.preset.label}.",
+                )
+            },
+            onSuccessMessage = "Les logs ont été exportés avec succès.",
         )
     }
 
@@ -968,6 +1026,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     executeDataCleanup(preview.cutoffDate)
                 }
+                appLogStore.logAction(
+                    actionType = "Nettoyage des données",
+                    details = "Nettoyage avant ${preview.cutoffDate}: ${preview.sessionsCount} sortie(s), ${preview.remarksCount} remarque(s).",
+                )
             },
             onSuccess = {
                 it.copy(
@@ -1225,6 +1287,10 @@ class SettingsViewModel(
                 pinCodeStore.resetAllPins()
                 appPreferencesStore.resetToDefaults()
                 application.reloadAppContainer()
+                appLogStore.logSystem(
+                    actionType = "Réinitialisation",
+                    details = "Réinitialisation complète de l'application.",
+                )
             },
             onSuccess = {
                 isInsideSettingsArea = false
@@ -1343,6 +1409,10 @@ class SettingsViewModel(
                         rowerRepository.updateRower(entity)
                     }
                 }
+                appLogStore.logAction(
+                    actionType = if (editingId == null) "Création de rameur" else "Modification de rameur",
+                    details = "Rameur enregistré: ${listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}.",
+                )
             },
             onSuccess = {
                 it.copy(
@@ -1364,6 +1434,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     rowerRepository.deleteRower(rower)
                 }
+                appLogStore.logAction(
+                    actionType = "Suppression de rameur",
+                    details = "Rameur supprimé: ${listOf(rower.firstName, rower.lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}.",
+                )
             },
             onSuccess = { state ->
                 state.copy(
@@ -1492,6 +1566,10 @@ class SettingsViewModel(
                         boatRepository.updateBoat(entity)
                     }
                 }
+                appLogStore.logAction(
+                    actionType = if (editingId == null) "Création de bateau" else "Modification de bateau",
+                    details = "Bateau enregistré: $boatName ($seatCount place(s)).",
+                )
             },
             onSuccess = {
                 it.copy(
@@ -1513,6 +1591,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     boatRepository.deleteBoat(boat)
                 }
+                appLogStore.logAction(
+                    actionType = "Suppression de bateau",
+                    details = "Bateau supprimé: ${boat.name}.",
+                )
             },
             onSuccess = { state ->
                 state.copy(
@@ -1610,6 +1692,10 @@ class SettingsViewModel(
                         destinationRepository.updateDestination(entity)
                     }
                 }
+                appLogStore.logAction(
+                    actionType = if (editingId == null) "Création de destination" else "Modification de destination",
+                    details = "Destination enregistrée: $destinationName.",
+                )
             },
             onSuccess = {
                 it.copy(
@@ -1630,6 +1716,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     destinationRepository.deleteDestination(destination)
                 }
+                appLogStore.logAction(
+                    actionType = "Suppression de destination",
+                    details = "Destination supprimée: ${destination.name}.",
+                )
             },
             onSuccess = { state ->
                 state.copy(
@@ -1891,6 +1981,7 @@ class SettingsViewModel(
                     }
                 }
                 .onFailure {
+                    appLogStore.logFailure(onErrorMessage)
                     uiStateMutable.update {
                         it.copy(
                             isWorking = false,
@@ -1921,6 +2012,7 @@ class SettingsViewModel(
                     }
                 }
                 .onFailure {
+                    appLogStore.logFailure(onErrorMessage)
                     uiStateMutable.update {
                         it.copy(
                             isWorking = false,

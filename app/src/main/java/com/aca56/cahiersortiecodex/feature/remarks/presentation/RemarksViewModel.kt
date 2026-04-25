@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.encodeRemarkPhotoPaths
@@ -127,6 +128,7 @@ class RemarksViewModel(
     private val boatRepository: BoatRepository,
     private val sessionRepository: SessionRepository,
     private val boatPhotoStorage: BoatPhotoStorage,
+    private val appLogStore: AppLogStore,
     private val initialBoatId: Long? = null,
     private val autoStartEditor: Boolean = false,
 ) : ViewModel() {
@@ -316,6 +318,10 @@ class RemarksViewModel(
                     boatPhotoStorage.importCompressedPhoto(uri)
                 }
             }.onSuccess { filePath ->
+                appLogStore.logAction(
+                    actionType = "Ajout de photo",
+                    details = "Ajout d'une photo depuis la galerie.",
+                )
                 uiStateMutable.update {
                     if (it.repairUpdateRemarkKey != null) {
                         it.copy(
@@ -332,6 +338,10 @@ class RemarksViewModel(
                     }
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec d'ajout de photo",
+                    details = "Impossible d'ajouter une photo à la remarque.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         message = "Impossible d'ajouter la photo à la remarque.",
@@ -349,6 +359,10 @@ class RemarksViewModel(
                     boatPhotoStorage.saveCompressedBitmap(bitmap)
                 }
             }.onSuccess { filePath ->
+                appLogStore.logAction(
+                    actionType = "Ajout de photo",
+                    details = "Ajout d'une photo prise avec l'appareil.",
+                )
                 uiStateMutable.update {
                     if (it.repairUpdateRemarkKey != null) {
                         it.copy(
@@ -365,6 +379,10 @@ class RemarksViewModel(
                     }
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec d'ajout de photo",
+                    details = "Impossible d'ajouter une photo prise avec l'appareil.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         message = "Impossible d'ajouter la photo.",
@@ -383,6 +401,12 @@ class RemarksViewModel(
             path
         }
         filePath?.let(boatPhotoStorage::deletePhoto)
+        if (filePath != null) {
+            appLogStore.logAction(
+                actionType = "Suppression de photo",
+                details = "Suppression d'une photo liée à une remarque ou à un suivi.",
+            )
+        }
         uiStateMutable.update {
             if (it.repairUpdateRemarkKey != null) {
                 it.copy(
@@ -433,6 +457,10 @@ class RemarksViewModel(
                     ),
                 )
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = "Suppression de suivi",
+                    details = "Suppression d'un suivi de réparation.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         message = "Le suivi a été supprimé.",
@@ -444,6 +472,10 @@ class RemarksViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec de suppression de suivi",
+                    details = "Le suivi de réparation n'a pas pu être supprimé.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         message = "Le suivi de réparation n'a pas pu être supprimé.",
@@ -521,6 +553,14 @@ class RemarksViewModel(
                     }
                 }
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = if (editingRemark == null) "Ajout de remarque" else "Modification de remarque",
+                    details = buildString {
+                        append("Remarque ")
+                        append(if (editingRemark == null) "ajoutée" else "mise à jour")
+                        append(" avec le statut ${state.editorStatus.name}.")
+                    },
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -536,6 +576,10 @@ class RemarksViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec d'enregistrement de remarque",
+                    details = "La remarque n'a pas pu être enregistrée.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -590,6 +634,10 @@ class RemarksViewModel(
                     }
                 }
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = "Suppression de remarque",
+                    details = "Suppression d'une remarque (${remark.status.name}).",
+                )
                 uiStateMutable.update {
                     val resetEditor = it.editingRemarkKey == remark.key
                     it.copy(
@@ -611,6 +659,10 @@ class RemarksViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec de suppression de remarque",
+                    details = "La remarque n'a pas pu être supprimée.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -673,6 +725,16 @@ class RemarksViewModel(
                     )
                 }
             }.onSuccess {
+                appLogStore.logAction(
+                    actionType = if (state.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) {
+                        "Réparation terminée"
+                    } else if (state.editingRepairUpdateId == null) {
+                        "Ajout de suivi"
+                    } else {
+                        "Modification de suivi"
+                    },
+                    details = "Mise à jour de l'historique de réparation pour la remarque ${activeRemark.id}.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -692,6 +754,10 @@ class RemarksViewModel(
                     )
                 }
             }.onFailure {
+                appLogStore.logError(
+                    actionType = "Échec d'enregistrement de suivi",
+                    details = "Le suivi de réparation n'a pas pu être enregistré.",
+                )
                 uiStateMutable.update {
                     it.copy(
                         isSaving = false,
@@ -851,6 +917,7 @@ class RemarksViewModel(
             boatRepository: BoatRepository,
             sessionRepository: SessionRepository,
             boatPhotoStorage: BoatPhotoStorage,
+            appLogStore: AppLogStore,
             initialBoatId: Long? = null,
             autoStartEditor: Boolean = false,
         ): ViewModelProvider.Factory {
@@ -863,6 +930,7 @@ class RemarksViewModel(
                         boatRepository = boatRepository,
                         sessionRepository = sessionRepository,
                         boatPhotoStorage = boatPhotoStorage,
+                        appLogStore = appLogStore,
                         initialBoatId = initialBoatId,
                         autoStartEditor = autoStartEditor,
                     ) as T

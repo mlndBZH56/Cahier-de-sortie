@@ -46,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +65,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.ui.components.AppImageViewerDialog
+import com.aca56.cahiersortiecodex.ui.components.DeleteConfirmationDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.PhotoSourceChooserDialog
@@ -104,12 +106,16 @@ fun BoatsScreen(
     onOpenBoat: (Long?) -> Unit,
 ) {
     val trackedOnSearchChanged = rememberInteractionAwareValueChange(onSearchQueryChanged)
+    val isCompactScreen = LocalConfiguration.current.screenWidthDp < 600
+    val horizontalPadding = if (isCompactScreen) 12.dp else 20.dp
+    val verticalPadding = if (isCompactScreen) 12.dp else 18.dp
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(contentPadding)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(
@@ -362,6 +368,9 @@ fun BoatDetailScreen(
     var typeMenuExpanded by remember { mutableStateOf(false) }
     var selectedPhotoPath by remember { mutableStateOf<String?>(null) }
     var showPhotoManager by remember { mutableStateOf(false) }
+    val isCompactScreen = LocalConfiguration.current.screenWidthDp < 600
+    val horizontalPadding = if (isCompactScreen) 12.dp else 20.dp
+    val verticalPadding = if (isCompactScreen) 12.dp else 18.dp
 
     selectedPhotoPath?.let { photoPath ->
         BoatPhotoViewerDialog(
@@ -385,7 +394,7 @@ fun BoatDetailScreen(
             .fillMaxSize()
             .padding(contentPadding)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(
@@ -422,14 +431,31 @@ fun BoatDetailScreen(
                             onClick = onCancelEditing,
                         ) { Text("Annuler") }
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(
-                                onClick = onExportBoatSheet,
-                                enabled = uiState.boat.hasPersistentBoat,
-                            ) { Text("Exporter cette fiche bateau") }
-                            Button(
-                                onClick = onStartEditing,
-                            ) { Text("Modifier le bateau") }
+                        if (isCompactScreen) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = onExportBoatSheet,
+                                    enabled = uiState.boat.hasPersistentBoat,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("Exporter cette fiche bateau") }
+                                Button(
+                                    onClick = onStartEditing,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("Modifier le bateau") }
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedButton(
+                                    onClick = onExportBoatSheet,
+                                    enabled = uiState.boat.hasPersistentBoat,
+                                ) { Text("Exporter cette fiche bateau") }
+                                Button(
+                                    onClick = onStartEditing,
+                                ) { Text("Modifier le bateau") }
+                            }
                         }
                     }
                 }
@@ -1046,6 +1072,18 @@ private fun BoatPhotoManagerDialog(
     onDeletePhoto: (Long) -> Unit,
     onViewPhoto: (String) -> Unit,
 ) {
+    var pendingDeletePhotoId by remember { mutableStateOf<Long?>(null) }
+
+    pendingDeletePhotoId?.let { photoId ->
+        DeleteConfirmationDialog(
+            onConfirm = {
+                onDeletePhoto(photoId)
+                pendingDeletePhotoId = null
+            },
+            onDismiss = { pendingDeletePhotoId = null },
+        )
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -1098,7 +1136,7 @@ private fun BoatPhotoManagerDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 OutlinedButton(
-                                    onClick = { onDeletePhoto(photo.id) },
+                                    onClick = { pendingDeletePhotoId = photo.id },
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text("Supprimer la photo")

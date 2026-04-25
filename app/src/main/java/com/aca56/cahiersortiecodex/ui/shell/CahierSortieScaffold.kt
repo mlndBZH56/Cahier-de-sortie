@@ -1,6 +1,8 @@
 package com.aca56.cahiersortiecodex.ui.shell
 
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -195,6 +197,7 @@ private fun AppNavigationDrawer(
         androidx.compose.foundation.layout.Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 20.dp),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
         ) {
