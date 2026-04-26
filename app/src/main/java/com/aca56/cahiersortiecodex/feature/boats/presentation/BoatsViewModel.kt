@@ -7,11 +7,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
-import com.aca56.cahiersortiecodex.data.local.entity.BoatRequiredLevel
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
-import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
@@ -19,11 +17,8 @@ import com.aca56.cahiersortiecodex.data.repository.BoatPhotoRepository
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
 import com.aca56.cahiersortiecodex.data.repository.RemarkRepository
 import com.aca56.cahiersortiecodex.data.repository.RepairUpdateRepository
-import com.aca56.cahiersortiecodex.data.repository.RowerRepository
 import com.aca56.cahiersortiecodex.data.repository.SessionRepository
-import com.aca56.cahiersortiecodex.data.security.PinCodeStore
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
-import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +41,6 @@ data class BoatListItemUi(
     val id: Long,
     val name: String,
     val status: BoatStatusUi,
-    val requiredLevel: BoatRequiredLevel = BoatRequiredLevel.DEBUTANT,
 )
 
 data class BoatSessionSummaryUi(
@@ -76,8 +70,6 @@ data class BoatDetailUi(
     val year: String = "",
     val notes: String = "",
     val status: BoatStatusUi = BoatStatusUi.AVAILABLE,
-    val requiredLevel: BoatRequiredLevel = BoatRequiredLevel.DEBUTANT,
-    val authorizedRowerIds: String = "",
     val remarks: List<RemarkEntity> = emptyList(),
     val repairUpdatesByRemarkId: Map<Long, List<RepairUpdateEntity>> = emptyMap(),
     val photos: List<BoatPhotoUi> = emptyList(),
@@ -104,9 +96,6 @@ data class BoatDetailUi(
             if (riggingCouple) add("Couple")
             if (riggingPointe) add("Pointe")
         }.ifEmpty { listOf("Non défini") }.joinToString(" / ")
-        
-    val authorizedRowerIdsSet: Set<Long>
-        get() = authorizedRowerIds.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
 }
 
 data class BoatsUiState(
@@ -128,33 +117,11 @@ data class BoatDetailUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val boat: BoatDetailUi = BoatDetailUi(),
-    val rowerSearchQuery: String = "",
-    val availableRowers: List<RowerEntity> = emptyList(),
     val message: String? = null,
     val messageType: FeedbackDialogType? = null,
 ) {
     val canSave: Boolean
         get() = boat.name.isNotBlank() && (boat.seatCount.toIntOrNull() ?: 0) > 0
-        
-    val rowerOptions: List<SearchableSelectableOption>
-        get() = availableRowers
-            .filter { rower -> 
-                rowerSearchQuery.isBlank() || 
-                rower.displayName.contains(rowerSearchQuery.trim(), ignoreCase = true) 
-            }
-            .map { rower ->
-                SearchableSelectableOption(
-                    key = rower.id.toString(),
-                    label = rower.displayName,
-                    usageCount = 0
-                )
-            }
-            
-    val authorizedRowerList: List<RowerEntity>
-        get() {
-            val authorizedIds = boat.authorizedRowerIdsSet
-            return availableRowers.filter { it.id in authorizedIds }
-        }
 }
 
 class BoatsViewModel(
@@ -181,7 +148,6 @@ class BoatsViewModel(
                             remarks = remarks,
                             ongoingSessions = ongoingSessions,
                         ),
-                        requiredLevel = boat.requiredLevel
                     )
                 }.sortedBy { it.name.lowercase() }
             }.collect { items ->
@@ -231,8 +197,6 @@ class BoatDetailViewModel(
     private val repairUpdateRepository: RepairUpdateRepository,
     private val sessionRepository: SessionRepository,
     private val boatPhotoStorage: BoatPhotoStorage,
-    private val rowerRepository: RowerRepository,
-    private val pinCodeStore: PinCodeStore,
 ) : ViewModel() {
     private val uiStateMutable = MutableStateFlow(
         BoatDetailUiState(
@@ -243,12 +207,6 @@ class BoatDetailViewModel(
     val uiState: StateFlow<BoatDetailUiState> = uiStateMutable.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            rowerRepository.observeRowers().collect { rowers ->
-                uiStateMutable.update { it.copy(availableRowers = rowers) }
-            }
-        }
-        
         if (boatId == null) {
             uiStateMutable.update { it.copy(isLoading = false) }
         } else {
@@ -276,15 +234,12 @@ class BoatDetailViewModel(
         updateBoatFields { copy(weightMinValue = sanitizeWeightValue(value)) }
     }
 
-    fun onWeightMaxValue(value: String) { 
-        updateBoatFields { copy(weightMaxValue = sanitizeWeightValue(value)) }
-    }
-
     fun onWeightMaxChanged(value: String) {
         updateBoatFields { copy(weightMaxValue = sanitizeWeightValue(value)) }
     }
 
     fun onWeightChanged(value: String) {
+        // Allows digits and a single decimal separator (dot or comma)
         val sanitized = value.replace(',', '.').filter { it.isDigit() || it == '.' }
         val finalValue = if (sanitized.count { it == '.' } > 1) {
             sanitized.substringBeforeLast(".")
@@ -325,24 +280,6 @@ class BoatDetailViewModel(
 
     fun onNotesChanged(value: String) {
         updateBoatFields { copy(notes = value) }
-    }
-    
-    fun onRequiredLevelChanged(level: BoatRequiredLevel) {
-        updateBoatFields { copy(requiredLevel = level) }
-    }
-    
-    fun onRowerSearchQueryChanged(query: String) {
-        uiStateMutable.update { it.copy(rowerSearchQuery = query) }
-    }
-    
-    fun onAuthorizedRowerToggled(rowerId: Long) {
-        val currentIds = uiState.value.boat.authorizedRowerIdsSet
-        val newIds = if (rowerId in currentIds) {
-            currentIds - rowerId
-        } else {
-            currentIds + rowerId
-        }
-        updateBoatFields { copy(authorizedRowerIds = newIds.joinToString(",")) }
     }
 
     fun startEditing() {
@@ -395,8 +332,6 @@ class BoatDetailViewModel(
             year = state.boat.year.toIntOrNull(),
             notes = state.boat.notes.trim(),
             weight = state.boat.weight.toDoubleOrNull(),
-            requiredLevel = state.boat.requiredLevel,
-            authorizedRowerIds = state.boat.authorizedRowerIds
         )
 
         viewModelScope.launch {
@@ -425,6 +360,77 @@ class BoatDetailViewModel(
                 }
             }.onFailure {
                 showError("Impossible d'enregistrer le bateau.", isSaving = false)
+            }
+        }
+    }
+
+    fun addPhoto(uri: Uri) {
+        addPhotos(listOf(uri))
+    }
+
+    fun addPhoto(bitmap: Bitmap) {
+        val currentBoatId = uiState.value.boat.id
+        if (currentBoatId == 0L) {
+            showError("Enregistrez d'abord le bateau avant d'ajouter une photo.")
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val filePath = boatPhotoStorage.saveCompressedBitmap(bitmap)
+                    boatPhotoRepository.savePhoto(
+                        BoatPhotoEntity(
+                            boatId = currentBoatId,
+                            filePath = filePath,
+                            createdAt = currentStorageDate(),
+                        ),
+                    )
+                }
+            }.onSuccess {
+                uiStateMutable.update {
+                    it.copy(
+                        message = "Photo ajoutée.",
+                        messageType = FeedbackDialogType.SUCCESS,
+                    )
+                }
+            }.onFailure {
+                showError("Impossible d'ajouter la photo.")
+            }
+        }
+    }
+
+    fun addPhotos(uris: List<Uri>) {
+        val currentBoatId = uiState.value.boat.id
+        if (currentBoatId == 0L) {
+            showError("Enregistrez d'abord le bateau avant d'ajouter une photo.")
+            return
+        }
+        if (uris.isEmpty()) return
+
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    uris.forEach { uri ->
+                        val filePath = boatPhotoStorage.importCompressedPhoto(uri)
+                        boatPhotoRepository.savePhoto(
+                            BoatPhotoEntity(
+                                boatId = currentBoatId,
+                                filePath = filePath,
+                                createdAt = currentStorageDate(),
+                            ),
+                        )
+                    }
+                }
+            }.onSuccess {
+                uiStateMutable.update {
+                    it.copy(
+                        message = if (uris.size == 1) "Photo ajoutée." else "${uris.size} photos ajoutées.",
+                        messageType = FeedbackDialogType.SUCCESS,
+                    )
+                }
+            }.onFailure {
+                showError("Impossible d'ajouter la photo.")
             }
         }
     }
@@ -538,8 +544,6 @@ class BoatDetailViewModel(
             year = year?.toString().orEmpty(),
             notes = notes,
             status = status,
-            requiredLevel = requiredLevel,
-            authorizedRowerIds = authorizedRowerIds,
             remarks = remarks.sortedWith(compareBy<RemarkEntity> { it.status.priority() }.thenByDescending { it.date }.thenByDescending { it.id }),
             repairUpdatesByRemarkId = repairUpdates
                 .filter { update -> remarks.any { it.id == update.remarkId } }
@@ -586,8 +590,6 @@ class BoatDetailViewModel(
             repairUpdateRepository: RepairUpdateRepository,
             sessionRepository: SessionRepository,
             boatPhotoStorage: BoatPhotoStorage,
-            rowerRepository: RowerRepository,
-            pinCodeStore: PinCodeStore,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -600,8 +602,6 @@ class BoatDetailViewModel(
                         repairUpdateRepository = repairUpdateRepository,
                         sessionRepository = sessionRepository,
                         boatPhotoStorage = boatPhotoStorage,
-                        rowerRepository = rowerRepository,
-                        pinCodeStore = pinCodeStore,
                     ) as T
                 }
             }

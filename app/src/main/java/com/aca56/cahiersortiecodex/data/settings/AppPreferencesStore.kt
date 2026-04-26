@@ -28,7 +28,6 @@ data class AppPreferences(
     val errorPopupDurationMillis: Long = DefaultErrorPopupDurationMillis,
     val animationsEnabled: Boolean = true,
     val crewsEnabled: Boolean = false,
-    val levelControlEnabled: Boolean = true,
 )
 
 class AppPreferencesStore(context: Context) {
@@ -65,7 +64,6 @@ class AppPreferencesStore(context: Context) {
         errorPopupDurationMillis: Long,
         animationsEnabled: Boolean,
         crewsEnabled: Boolean,
-        levelControlEnabled: Boolean = currentPreferences().levelControlEnabled,
     ) {
         preferences.edit()
             .putLong(KEY_INACTIVITY_TIMEOUT_MILLIS, inactivityTimeoutMillis)
@@ -73,7 +71,6 @@ class AppPreferencesStore(context: Context) {
             .putLong(KEY_ERROR_POPUP_DURATION_MILLIS, errorPopupDurationMillis)
             .putBoolean(KEY_ANIMATIONS_ENABLED, animationsEnabled)
             .putBoolean(KEY_CREWS_ENABLED, crewsEnabled)
-            .putBoolean(KEY_LEVEL_CONTROL_ENABLED, levelControlEnabled)
             .apply()
         refresh()
     }
@@ -94,7 +91,6 @@ class AppPreferencesStore(context: Context) {
             .putLong(KEY_ERROR_POPUP_DURATION_MILLIS, appPreferences.errorPopupDurationMillis)
             .putBoolean(KEY_ANIMATIONS_ENABLED, appPreferences.animationsEnabled)
             .putBoolean(KEY_CREWS_ENABLED, appPreferences.crewsEnabled)
-            .putBoolean(KEY_LEVEL_CONTROL_ENABLED, appPreferences.levelControlEnabled)
             .apply()
         refresh()
     }
@@ -142,10 +138,6 @@ class AppPreferencesStore(context: Context) {
                 KEY_CREWS_ENABLED,
                 false,
             ),
-            levelControlEnabled = preferences.getBoolean(
-                KEY_LEVEL_CONTROL_ENABLED,
-                true,
-            ),
         )
     }
 
@@ -165,6 +157,5 @@ class AppPreferencesStore(context: Context) {
         private const val KEY_ERROR_POPUP_DURATION_MILLIS = "error_popup_duration_millis"
         private const val KEY_ANIMATIONS_ENABLED = "animations_enabled"
         private const val KEY_CREWS_ENABLED = "crews_enabled"
-        private const val KEY_LEVEL_CONTROL_ENABLED = "level_control_enabled"
     }
 }
