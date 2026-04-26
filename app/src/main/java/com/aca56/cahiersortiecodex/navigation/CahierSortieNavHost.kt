@@ -21,6 +21,7 @@ import com.aca56.cahiersortiecodex.feature.home.presentation.HomeRoute
 import com.aca56.cahiersortiecodex.feature.newsession.presentation.NewSessionRoute
 import com.aca56.cahiersortiecodex.feature.ongoingsessions.presentation.OngoingSessionsRoute
 import com.aca56.cahiersortiecodex.feature.remarks.presentation.RemarksRoute
+import com.aca56.cahiersortiecodex.feature.settings.presentation.AccreditationsRoute
 import com.aca56.cahiersortiecodex.feature.settings.presentation.SettingsRoute
 import com.aca56.cahiersortiecodex.feature.settings.presentation.SettingsBoatsRoute
 import com.aca56.cahiersortiecodex.feature.settings.presentation.SettingsDestinationsRoute
@@ -336,6 +337,9 @@ fun CahierSortieNavHost(navController: NavHostController) {
                     onOpenCrews = {
                         navController.navigate(AppDestination.Crews.route) { launchSingleTop = true }
                     },
+                    onOpenAccreditations = {
+                        navController.navigate(AppDestination.SettingsAccreditations.route) { launchSingleTop = true }
+                    },
                 )
             }
             composable(AppDestination.SettingsRowers.route) {
@@ -346,6 +350,9 @@ fun CahierSortieNavHost(navController: NavHostController) {
             }
             composable(AppDestination.SettingsDestinations.route) {
                 SettingsDestinationsRoute(contentPadding = innerPadding, viewModel = settingsViewModel)
+            }
+            composable(AppDestination.SettingsAccreditations.route) {
+                AccreditationsRoute(contentPadding = innerPadding, viewModel = settingsViewModel)
             }
         }
     }

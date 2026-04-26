@@ -51,10 +51,14 @@ sealed class AppDestination(
         }
     }
     data object Stats : AppDestination("stats", "Statistiques")
+    data object RowerProfile : AppDestination("rower_profile/{rowerName}", "Profil rameur") {
+        fun createRoute(rowerName: String): String = "rower_profile/$rowerName"
+    }
     data object Settings : AppDestination("settings", "Paramètres")
     data object SettingsRowers : AppDestination("settings/rowers", "Gérer les rameurs")
     data object SettingsBoats : AppDestination("settings/boats", "Gérer les bateaux")
     data object SettingsDestinations : AppDestination("settings/destinations", "Gérer les destinations")
+    data object SettingsAccreditations : AppDestination("settings/accreditations", "Accréditations")
 }
 
 val allDestinations = listOf(
@@ -69,10 +73,12 @@ val allDestinations = listOf(
     AppDestination.EditSession,
     AppDestination.Remarks,
     AppDestination.Stats,
+    AppDestination.RowerProfile,
     AppDestination.Settings,
     AppDestination.SettingsRowers,
     AppDestination.SettingsBoats,
     AppDestination.SettingsDestinations,
+    AppDestination.SettingsAccreditations,
 )
 
 val topLevelDestinations = listOf(

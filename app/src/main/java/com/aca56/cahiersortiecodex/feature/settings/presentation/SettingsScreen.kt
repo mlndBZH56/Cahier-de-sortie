@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,13 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -36,9 +35,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
@@ -48,7 +47,6 @@ import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
 import com.aca56.cahiersortiecodex.data.settings.ThemeMode
-import com.aca56.cahiersortiecodex.feature.settings.presentation.DataCleanupPeriod
 import com.aca56.cahiersortiecodex.ui.components.AppTextField
 import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
 import com.aca56.cahiersortiecodex.ui.components.AppSelectorFieldButton
@@ -59,8 +57,6 @@ import com.aca56.cahiersortiecodex.ui.components.ExportActionButton
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
-import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableOption
-import com.aca56.cahiersortiecodex.ui.components.SearchableSingleSelectList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
 import java.text.SimpleDateFormat
@@ -75,6 +71,7 @@ fun SettingsRoute(
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
     onOpenCrews: () -> Unit,
+    onOpenAccreditations: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var pendingSingleBoatExportId by remember { mutableStateOf<Long?>(null) }
@@ -162,9 +159,11 @@ fun SettingsRoute(
         onErrorPopupDurationSecondsChanged = viewModel::onErrorPopupDurationSecondsChanged,
         onAnimationsEnabledChanged = viewModel::onAnimationsEnabledChanged,
         onCrewsEnabledChanged = viewModel::onCrewsEnabledChanged,
+        onLevelControlEnabledChanged = viewModel::onLevelControlEnabledChanged,
         onPrimaryColorChanged = viewModel::onPrimaryColorChanged,
         onSecondaryColorChanged = viewModel::onSecondaryColorChanged,
         onTertiaryColorChanged = viewModel::onTertiaryColorChanged,
+        onActivateSuperAdminPersistentSession = viewModel::activateSuperAdminPersistentSession,
         onUnlockSettings = viewModel::unlockSettings,
         onSaveFirstPin = viewModel::saveFirstPin,
         onChangeNormalPin = viewModel::changeNormalPin,
@@ -248,6 +247,7 @@ fun SettingsRoute(
         onOpenBoats = onOpenBoats,
         onOpenDestinations = onOpenDestinations,
         onOpenCrews = onOpenCrews,
+        onOpenAccreditations = onOpenAccreditations,
         onDismissRestartAfterRestore = viewModel::dismissRestartAfterRestore,
         onClearMessage = viewModel::clearMessage,
     )
@@ -270,9 +270,11 @@ fun SettingsScreen(
     onErrorPopupDurationSecondsChanged: (String) -> Unit,
     onAnimationsEnabledChanged: (Boolean) -> Unit,
     onCrewsEnabledChanged: (Boolean) -> Unit,
+    onLevelControlEnabledChanged: (Boolean) -> Unit,
     onPrimaryColorChanged: (String) -> Unit,
     onSecondaryColorChanged: (String) -> Unit,
     onTertiaryColorChanged: (String) -> Unit,
+    onActivateSuperAdminPersistentSession: () -> Unit,
     onUnlockSettings: () -> Unit,
     onSaveFirstPin: () -> Unit,
     onChangeNormalPin: () -> Unit,
@@ -325,6 +327,7 @@ fun SettingsScreen(
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
     onOpenCrews: () -> Unit,
+    onOpenAccreditations: () -> Unit,
     onDismissRestartAfterRestore: () -> Unit,
     onClearMessage: () -> Unit,
 ) {
@@ -359,9 +362,11 @@ fun SettingsScreen(
             onErrorPopupDurationSecondsChanged = onErrorPopupDurationSecondsChanged,
             onAnimationsEnabledChanged = onAnimationsEnabledChanged,
             onCrewsEnabledChanged = onCrewsEnabledChanged,
+            onLevelControlEnabledChanged = onLevelControlEnabledChanged,
             onPrimaryColorChanged = onPrimaryColorChanged,
             onSecondaryColorChanged = onSecondaryColorChanged,
             onTertiaryColorChanged = onTertiaryColorChanged,
+            onActivateSuperAdminPersistentSession = onActivateSuperAdminPersistentSession,
             onChangeNormalPin = onChangeNormalPin,
             onChangeSuperAdminPin = onChangeSuperAdminPin,
             onSaveAppSettings = onSaveAppSettings,
@@ -412,6 +417,7 @@ fun SettingsScreen(
             onOpenBoats = onOpenBoats,
             onOpenDestinations = onOpenDestinations,
             onOpenCrews = onOpenCrews,
+            onOpenAccreditations = onOpenAccreditations,
             onDismissRestartAfterRestore = onDismissRestartAfterRestore,
         )
     }
@@ -576,9 +582,11 @@ private fun SettingsContent(
     onErrorPopupDurationSecondsChanged: (String) -> Unit,
     onAnimationsEnabledChanged: (Boolean) -> Unit,
     onCrewsEnabledChanged: (Boolean) -> Unit,
+    onLevelControlEnabledChanged: (Boolean) -> Unit,
     onPrimaryColorChanged: (String) -> Unit,
     onSecondaryColorChanged: (String) -> Unit,
     onTertiaryColorChanged: (String) -> Unit,
+    onActivateSuperAdminPersistentSession: () -> Unit,
     onChangeNormalPin: () -> Unit,
     onChangeSuperAdminPin: () -> Unit,
     onSaveAppSettings: () -> Unit,
@@ -629,6 +637,7 @@ private fun SettingsContent(
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
     onOpenCrews: () -> Unit,
+    onOpenAccreditations: () -> Unit,
     onDismissRestartAfterRestore: () -> Unit,
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
@@ -639,7 +648,7 @@ private fun SettingsContent(
     var showLogsExportDialog by remember { mutableStateOf(false) }
     var showExportDateFromPicker by remember { mutableStateOf(false) }
     var showExportDateToPicker by remember { mutableStateOf(false) }
-    var selectedLogCategories by remember { mutableStateOf(AppLogCategory.values().toSet()) }
+    var selectedLogCategories by remember { mutableStateOf(AppLogCategory.entries.toSet()) }
     var selectedLogDatePreset by remember { mutableStateOf(AppLogDatePreset.LAST_7_DAYS) }
     var logCustomDateFrom by remember { mutableStateOf("") }
     var logCustomDateTo by remember { mutableStateOf("") }
@@ -851,7 +860,7 @@ private fun SettingsContent(
             buttons = {
                 OutlinedButton(
                     onClick = {
-                        selectedLogCategories = AppLogCategory.values().toSet()
+                        selectedLogCategories = AppLogCategory.entries.toSet()
                         selectedLogDatePreset = AppLogDatePreset.LAST_7_DAYS
                         logCustomDateFrom = ""
                         logCustomDateTo = ""
@@ -891,7 +900,7 @@ private fun SettingsContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                 )
-                AppLogCategory.values().forEach { category ->
+                AppLogCategory.entries.forEach { category ->
                     CleanupToggleButton(
                         label = category.label,
                         selected = category in selectedLogCategories,
@@ -911,7 +920,7 @@ private fun SettingsContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                 )
-                AppLogDatePreset.values().forEach { preset ->
+                AppLogDatePreset.entries.forEach { preset ->
                     CleanupToggleButton(
                         label = preset.label,
                         selected = preset == selectedLogDatePreset,
@@ -1020,6 +1029,7 @@ private fun SettingsContent(
                                 onOpenRowers = onOpenRowers,
                                 onOpenBoats = onOpenBoats,
                                 onOpenDestinations = onOpenDestinations,
+                                onOpenAccreditations = onOpenAccreditations,
                             )
 
                             SectionHeader(
@@ -1049,6 +1059,7 @@ private fun SettingsContent(
                                     onInactivityTimeoutMinutesChanged = onInactivityTimeoutMinutesChanged,
                                     onAnimationsEnabledChanged = onAnimationsEnabledChanged,
                                     onCrewsEnabledChanged = onCrewsEnabledChanged,
+                                    onLevelControlEnabledChanged = onLevelControlEnabledChanged,
                                     onOpenCrews = onOpenCrews,
                                     onSaveAppSettings = onSaveAppSettings,
                                 )
@@ -1084,6 +1095,7 @@ private fun SettingsContent(
                                     onSuperAdminNewPinChanged = onSuperAdminNewPinChanged,
                                     onSuperAdminConfirmPinChanged = onSuperAdminConfirmPinChanged,
                                     onChangeSuperAdminPin = onChangeSuperAdminPin,
+                                    onActivatePersistentSession = onActivateSuperAdminPersistentSession,
                                 )
                             }
                         }
@@ -1112,6 +1124,7 @@ private fun SettingsContent(
                         onOpenRowers = onOpenRowers,
                         onOpenBoats = onOpenBoats,
                         onOpenDestinations = onOpenDestinations,
+                        onOpenAccreditations = onOpenAccreditations,
                     )
 
                     SectionHeader(
@@ -1136,6 +1149,7 @@ private fun SettingsContent(
                             onInactivityTimeoutMinutesChanged = onInactivityTimeoutMinutesChanged,
                             onAnimationsEnabledChanged = onAnimationsEnabledChanged,
                             onCrewsEnabledChanged = onCrewsEnabledChanged,
+                            onLevelControlEnabledChanged = onLevelControlEnabledChanged,
                             onOpenCrews = onOpenCrews,
                             onSaveAppSettings = onSaveAppSettings,
                         )
@@ -1171,6 +1185,7 @@ private fun SettingsContent(
                             onSuperAdminNewPinChanged = onSuperAdminNewPinChanged,
                             onSuperAdminConfirmPinChanged = onSuperAdminConfirmPinChanged,
                             onChangeSuperAdminPin = onChangeSuperAdminPin,
+                            onActivatePersistentSession = onActivateSuperAdminPersistentSession,
                         )
                     }
                 }
@@ -1205,10 +1220,11 @@ private fun ManagementLinksSection(
     onOpenRowers: () -> Unit,
     onOpenBoats: () -> Unit,
     onOpenDestinations: () -> Unit,
+    onOpenAccreditations: () -> Unit,
 ) {
     SettingsSection(
         title = "Gérer les données",
-        description = "Ouvrir les écrans de gestion des rameurs, bateaux et destinations.",
+        description = "Ouvrir les écrans de gestion des rameurs, bateaux, destinations et accréditations.",
     ) {
         Button(
             onClick = onOpenRowers,
@@ -1227,6 +1243,12 @@ private fun ManagementLinksSection(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Ouvrir l'écran des destinations")
+        }
+        Button(
+            onClick = onOpenAccreditations,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Ouvrir l'écran des accréditations")
         }
     }
 }
@@ -1365,8 +1387,8 @@ private fun RowerManagementSection(
         } else {
             uiState.rowerManagement.rowers.forEach { rower ->
                 EditableListRow(
-                    label = listOf(rower.firstName, rower.lastName).filter { it.isNotBlank() }.joinToString(" "),
-                    secondaryLabel = null,
+                    label = rower.displayName,
+                    secondaryLabel = rower.level.label,
                     enabled = !uiState.isWorking,
                     onEdit = { onEdit(rower) },
                     onDelete = { onDelete(rower) },
@@ -1404,8 +1426,9 @@ private fun BoatManagementSection(
             Text("Format accepté : Fichier CSV (.csv)")
             Text("Structure du fichier (8 colonnes dans l'ordre) :", fontWeight = FontWeight.Bold)
             Text("1. Nom du bateau\n2. Nombre de places\n3. Type (ex: 1x, 2-, 8+...)\n4. Porteur (ex: 70-85 kg)\n5. Poids réel (kg)\n6. Armement (Couple, Pointe, ou Couple/Pointe)\n7. Année\n8. Notes")
-            Text("Notes :", fontWeight = FontWeight.Bold)
-            Text("- Année : nombre à 4 chiffres.\n- Places : nombre entier supérieur à 0.\n- Les en-têtes sont détectés automatiquement.")
+            Text("Formats attendus :", fontWeight = FontWeight.Bold)
+            Text("- Poids réel : utiliser un point (.) pour la décimale (ex: 14.5).\n- Année : nombre à 4 chiffres.\n- Places : nombre entier supérieur à 0.")
+            Text("Note : Les en-têtes sont détectés automatiquement.", style = MaterialTheme.typography.bodySmall)
         }
     }
 
@@ -1477,7 +1500,7 @@ private fun BoatManagementSection(
             uiState.boatManagement.boats.forEach { boat ->
                 EditableListRow(
                     label = boat.name,
-                    secondaryLabel = "Places : ${boat.seatCount}",
+                    secondaryLabel = "Places : ${boat.seatCount} | Niveau : ${boat.requiredLevel.label}",
                     enabled = !uiState.isWorking,
                     onEdit = { onEditBoat(boat) },
                     onDelete = { onDeleteBoat(boat) },
@@ -1560,6 +1583,7 @@ private fun AppBehaviorSection(
     onInactivityTimeoutMinutesChanged: (String) -> Unit,
     onAnimationsEnabledChanged: (Boolean) -> Unit,
     onCrewsEnabledChanged: (Boolean) -> Unit,
+    onLevelControlEnabledChanged: (Boolean) -> Unit,
     onOpenCrews: () -> Unit,
     onSaveAppSettings: () -> Unit,
 ) {
@@ -1567,7 +1591,7 @@ private fun AppBehaviorSection(
 
     SettingsSection(
         title = "Comportement de l'application",
-        description = "Contrôler l'inactivité, les animations et le mode d'affichage.",
+        description = "Contrôler l'inactivité, les animations et les fonctionnalités avancées.",
     ) {
         AppTextField(
             value = uiState.inactivityTimeoutMinutesInput,
@@ -1618,6 +1642,27 @@ private fun AppBehaviorSection(
                 onCheckedChange = onCrewsEnabledChanged,
             )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Contrôle des accréditations",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = "Vérifier le niveau des rameurs lors de la sélection d'un bateau.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = uiState.levelControlEnabled,
+                onCheckedChange = onLevelControlEnabledChanged,
+            )
+        }
         if (uiState.crewsEnabled) {
             OutlinedButton(
                 onClick = onOpenCrews,
@@ -1631,7 +1676,7 @@ private fun AppBehaviorSection(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium,
         )
-        ThemeMode.values().forEach { themeMode ->
+        ThemeMode.entries.forEach { themeMode ->
             val isSelected = uiState.themeMode == themeMode
             if (isSelected) {
                 Button(
@@ -1773,7 +1818,7 @@ private fun DataCleanupSection(
             fontWeight = FontWeight.Medium,
         )
 
-        DataCleanupPeriod.values().forEach { period ->
+        DataCleanupPeriod.entries.forEach { period ->
             val selected = uiState.cleanupPeriod == period
             if (selected) {
                 Button(
@@ -1942,6 +1987,7 @@ private fun AdvancedAccessSection(
     onSuperAdminNewPinChanged: (String) -> Unit,
     onSuperAdminConfirmPinChanged: (String) -> Unit,
     onChangeSuperAdminPin: () -> Unit,
+    onActivatePersistentSession: () -> Unit,
 ) {
     val trackedOnSuperAdminCurrentPinChanged = rememberInteractionAwareValueChange(onSuperAdminCurrentPinChanged)
     val trackedOnSuperAdminNewPinChanged = rememberInteractionAwareValueChange(onSuperAdminNewPinChanged)
@@ -1949,7 +1995,7 @@ private fun AdvancedAccessSection(
 
     SettingsSection(
         title = "PIN super administrateur",
-        description = "Mettre à jour le code PIN utilisé pour accéder à la section super administrateur.",
+        description = "Mettre à jour le code PIN super administrateur ou activer la session persistante.",
     ) {
         AppTextField(
             value = uiState.superAdminCurrentPinInput,
@@ -1978,6 +2024,19 @@ private fun AdvancedAccessSection(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (uiState.isWorking) "Traitement..." else "Modifier le PIN super administrateur")
+        }
+        
+        Spacer(modifier = Modifier.padding(vertical = 4.dp))
+        
+        Button(
+            onClick = onActivatePersistentSession,
+            enabled = !uiState.isPersistentSessionActive,
+            modifier = Modifier.fillMaxWidth(),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = if (uiState.isPersistentSessionActive) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.tertiary
+            )
+        ) {
+            Text(if (uiState.isPersistentSessionActive) "Session persistante active" else "Activer la session persistante")
         }
     }
 }

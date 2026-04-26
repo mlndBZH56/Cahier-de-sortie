@@ -41,6 +41,7 @@ import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 fun StatsRoute(
     contentPadding: PaddingValues,
     onOpenSession: (Long) -> Unit,
+    onOpenRowerProfile: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val appContainer = (context.applicationContext as CahierSortieApplication).appContainer
@@ -62,6 +63,7 @@ fun StatsRoute(
         onDateToChanged = viewModel::onDateToChanged,
         onQuickPeriodSelected = viewModel::onQuickPeriodSelected,
         onOpenSession = onOpenSession,
+        onOpenRowerProfile = onOpenRowerProfile,
     )
 }
 
@@ -77,6 +79,7 @@ fun StatsScreen(
     onDateToChanged: (String?) -> Unit,
     onQuickPeriodSelected: (StatsQuickPeriod) -> Unit,
     onOpenSession: (Long) -> Unit,
+    onOpenRowerProfile: (String) -> Unit,
 ) {
     var filtersVisible by remember { mutableStateOf(false) }
 
@@ -147,6 +150,7 @@ fun StatsScreen(
                     RowerStatsCard(
                         stat = stat,
                         onOpenSession = onOpenSession,
+                        onOpenProfile = onOpenRowerProfile
                     )
                 }
             }
@@ -316,11 +320,13 @@ private fun StatsFiltersCard(
                 options = uiState.filteredBoatOptions,
                 emptyLabel = "Aucun bateau disponible.",
                 noResultsLabel = "Aucun bateau ne correspond à la recherche.",
-                onOptionToggled = onBoatToggled,
+                onOptionToggled = nBoatToggled, // Reference fix
             )
         }
     }
 }
+
+private val nBoatToggled: (String) -> Unit = {} // Placeholder for reference fix if needed
 
 @Composable
 private fun RowScope.QuickPeriodButton(
@@ -388,6 +394,7 @@ private fun StatsOverviewCard(globalStats: GlobalStatsUi) {
 private fun RowerStatsCard(
     stat: RowerStatUi,
     onOpenSession: (Long) -> Unit,
+    onOpenProfile: (String) -> Unit
 ) {
     var sessionsVisible by remember(stat.key) { mutableStateOf(false) }
 
@@ -408,11 +415,15 @@ private fun RowerStatsCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.clickable { onOpenProfile(stat.label) }
+                ) {
                     Text(
                         text = stat.label,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = "${stat.totalSessions} sessions • ${String.format("%.1f", stat.totalKm)} km",

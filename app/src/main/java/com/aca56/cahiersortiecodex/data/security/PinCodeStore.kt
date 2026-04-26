@@ -1,9 +1,15 @@
 package com.aca56.cahiersortiecodex.data.security
 
 import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class PinCodeStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    
+    private val _isSuperAdminSessionActive = MutableStateFlow(false)
+    val isSuperAdminSessionActive: StateFlow<Boolean> = _isSuperAdminSessionActive.asStateFlow()
 
     fun hasPin(): Boolean = preferences.contains(KEY_PIN)
 
@@ -12,6 +18,7 @@ class PinCodeStore(context: Context) {
     }
 
     fun verifyPin(pin: String): Boolean {
+        if (_isSuperAdminSessionActive.value) return true
         return preferences.getString(KEY_PIN, null) == pin
     }
 
@@ -20,6 +27,7 @@ class PinCodeStore(context: Context) {
     }
 
     fun verifyNormalPin(pin: String): Boolean {
+        if (_isSuperAdminSessionActive.value) return true
         return verifyPin(pin)
     }
 
@@ -28,7 +36,12 @@ class PinCodeStore(context: Context) {
     }
 
     fun verifySuperAdminPin(pin: String): Boolean {
-        return getSuperAdminPin() == pin
+        if (_isSuperAdminSessionActive.value) return true
+        val isValid = getSuperAdminPin() == pin
+        if (isValid) {
+            _isSuperAdminSessionActive.value = true
+        }
+        return isValid
     }
 
     fun getSuperAdminPin(): String {
@@ -68,6 +81,7 @@ class PinCodeStore(context: Context) {
             .remove(KEY_PIN)
             .remove(KEY_SUPER_ADMIN_PIN)
             .apply()
+        _isSuperAdminSessionActive.value = false
     }
 
     companion object {

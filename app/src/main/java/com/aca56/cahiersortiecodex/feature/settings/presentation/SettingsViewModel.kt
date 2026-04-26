@@ -13,12 +13,14 @@ import com.aca56.cahiersortiecodex.data.importing.RowerImportParser
 import com.aca56.cahiersortiecodex.data.logging.AppLogExportFilters
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
+import com.aca56.cahiersortiecodex.data.local.entity.BoatRequiredLevel
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RowerEntity
+import com.aca56.cahiersortiecodex.data.local.entity.RowerLevel
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
 import com.aca56.cahiersortiecodex.data.local.relation.SessionWithDetails
 import com.aca56.cahiersortiecodex.data.repository.BoatRepository
@@ -98,6 +100,7 @@ data class SettingsUiState(
     val hasPin: Boolean = false,
     val isUnlocked: Boolean = false,
     val isSuperAdmin: Boolean = false,
+    val isPersistentSessionActive: Boolean = false,
     val pinInput: String = "",
     val currentPinInput: String = "",
     val newPinInput: String = "",
@@ -114,6 +117,7 @@ data class SettingsUiState(
     val errorPopupDurationSecondsInput: String = formatSeconds(DefaultErrorPopupDurationMillis),
     val animationsEnabled: Boolean = true,
     val crewsEnabled: Boolean = false,
+    val levelControlEnabled: Boolean = true,
     val isWorking: Boolean = false,
     val message: String? = null,
     val messageType: FeedbackDialogType? = null,
@@ -267,6 +271,15 @@ class SettingsViewModel(
         observeBoats()
         observeDestinations()
         observeSessions()
+        observeSuperAdminSession()
+    }
+
+    private fun observeSuperAdminSession() {
+        viewModelScope.launch {
+            pinCodeStore.isSuperAdminSessionActive.collect { active ->
+                uiStateMutable.update { it.copy(isPersistentSessionActive = active) }
+            }
+        }
     }
 
     fun onNavigationDestinationChanged(route: String?) {
@@ -291,8 +304,8 @@ class SettingsViewModel(
         uiStateMutable.update {
             it.copy(
                 hasPin = hasPin,
-                isUnlocked = if (shouldRequirePin) false else it.isUnlocked,
-                isSuperAdmin = if (shouldRequirePin) false else it.isSuperAdmin,
+                isUnlocked = if (shouldRequirePin) pinCodeStore.isSuperAdminSessionActive.value else it.isUnlocked,
+                isSuperAdmin = if (shouldRequirePin) pinCodeStore.isSuperAdminSessionActive.value else it.isSuperAdmin,
                 pinInput = if (shouldRequirePin) "" else it.pinInput,
                 currentPinInput = if (shouldRequirePin) "" else it.currentPinInput,
                 newPinInput = if (shouldRequirePin) "" else it.newPinInput,
@@ -309,6 +322,7 @@ class SettingsViewModel(
                 errorPopupDurationSecondsInput = formatSeconds(preferences.errorPopupDurationMillis),
                 animationsEnabled = preferences.animationsEnabled,
                 crewsEnabled = preferences.crewsEnabled,
+                levelControlEnabled = preferences.levelControlEnabled,
                 selectedExportRowers = if (shouldRequirePin) emptySet() else it.selectedExportRowers,
                 exportRowerSearchQuery = if (shouldRequirePin) "" else it.exportRowerSearchQuery,
                 selectedExportBoatIds = if (shouldRequirePin) emptySet() else it.selectedExportBoatIds,
@@ -396,6 +410,10 @@ class SettingsViewModel(
         uiStateMutable.update { it.copy(crewsEnabled = value, message = null, messageType = null) }
     }
 
+    fun onLevelControlEnabledChanged(value: Boolean) {
+        uiStateMutable.update { it.copy(levelControlEnabled = value, message = null, messageType = null) }
+    }
+
     fun onPrimaryColorChanged(value: String) {
         uiStateMutable.update { it.copy(primaryColorInput = value.uppercase(), message = null, messageType = null) }
     }
@@ -406,6 +424,32 @@ class SettingsViewModel(
 
     fun onTertiaryColorChanged(value: String) {
         uiStateMutable.update { it.copy(tertiaryColorInput = value.uppercase(), message = null, messageType = null) }
+    }
+
+    fun activateSuperAdminPersistentSession() {
+        if (uiState.value.isSuperAdmin) {
+            pinCodeStore.verifySuperAdminPin(pinCodeStore.getSuperAdminPin())
+            uiStateMutable.update {
+                it.copy(
+                    message = "Session super administrateur activée jusqu'à la fermeture de l'app.",
+                    messageType = FeedbackDialogType.SUCCESS
+                )
+            }
+        }
+    }
+
+    fun updateRowerLevel(rowerId: Long, newLevel: RowerLevel) {
+        val rower = uiState.value.rowerManagement.rowers.firstOrNull { it.id == rowerId } ?: return
+        if (rower.level == newLevel) return
+
+        launchWork(
+            onErrorMessage = "Impossible de mettre à jour le niveau du rameur.",
+            block = {
+                withContext(Dispatchers.IO) {
+                    rowerRepository.updateRower(rower.copy(level = newLevel))
+                }
+            }
+        )
     }
 
     fun saveFirstPin() {
@@ -1156,7 +1200,7 @@ class SettingsViewModel(
                 }
                 return
             }
-            inactivityTimeoutMillis < 30_000L -> {
+            it < 30_000L -> { // This was using 'it' incorrectly in previous version
                 uiStateMutable.update {
                     it.copy(
                         message = "Le délai d'inactivité doit être d'au moins 0,5 minute.",
@@ -1169,11 +1213,12 @@ class SettingsViewModel(
 
         appPreferencesStore.saveThemeMode(uiState.value.themeMode)
         appPreferencesStore.saveAdvancedBehavior(
-            inactivityTimeoutMillis = inactivityTimeoutMillis,
+            inactivityTimeoutMillis = inactivityTimeoutMillis!!,
             successPopupDurationMillis = appPreferencesStore.currentPreferences().successPopupDurationMillis,
             errorPopupDurationMillis = appPreferencesStore.currentPreferences().errorPopupDurationMillis,
             animationsEnabled = uiState.value.animationsEnabled,
             crewsEnabled = uiState.value.crewsEnabled,
+            levelControlEnabled = uiState.value.levelControlEnabled,
         )
         loadAppPreferencesIntoState(message = "Le comportement de l'application a été enregistré.")
     }
@@ -1262,6 +1307,7 @@ class SettingsViewModel(
             errorPopupDurationMillis = errorDurationMillis,
             animationsEnabled = preferences.animationsEnabled,
             crewsEnabled = preferences.crewsEnabled,
+            levelControlEnabled = preferences.levelControlEnabled,
         )
         loadAppPreferencesIntoState(message = "Les paramètres de notification ont été enregistrés.")
     }
@@ -1556,7 +1602,7 @@ class SettingsViewModel(
             }
         }
 
-        val editingId = state.boatManagement.editingBoatId
+        val editingId = state.boatManagement.editingId
         val duplicate = state.boatManagement.boats.any { boat ->
             boat.id != editingId && boat.name.equals(boatName, ignoreCase = true)
         }
@@ -1603,6 +1649,9 @@ class SettingsViewModel(
             },
         )
     }
+
+    private val BoatManagementUi.editingId: Long?
+        get() = editingBoatId
 
     fun deleteBoat(boat: BoatEntity) {
         launchWork(
@@ -1956,6 +2005,7 @@ class SettingsViewModel(
                 errorPopupDurationSecondsInput = formatSeconds(preferences.errorPopupDurationMillis),
                 animationsEnabled = preferences.animationsEnabled,
                 crewsEnabled = preferences.crewsEnabled,
+                levelControlEnabled = preferences.levelControlEnabled,
                 message = message ?: it.message,
                 messageType = if (message == null) it.messageType else FeedbackDialogType.SUCCESS,
             )

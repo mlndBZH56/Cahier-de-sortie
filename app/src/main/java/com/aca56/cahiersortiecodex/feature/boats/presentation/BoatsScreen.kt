@@ -29,6 +29,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -40,6 +42,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +65,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aca56.cahiersortiecodex.CahierSortieApplication
 import com.aca56.cahiersortiecodex.data.export.DatabaseCsvExporter
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
+import com.aca56.cahiersortiecodex.data.local.entity.BoatRequiredLevel
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkStatus
 import com.aca56.cahiersortiecodex.ui.components.AppImageViewerDialog
@@ -69,6 +73,10 @@ import com.aca56.cahiersortiecodex.ui.components.DeleteConfirmationDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialog
 import com.aca56.cahiersortiecodex.ui.components.FeedbackDialogType
 import com.aca56.cahiersortiecodex.ui.components.PhotoSourceChooserDialog
+import com.aca56.cahiersortiecodex.ui.components.AppModalDialog
+import com.aca56.cahiersortiecodex.ui.components.AppTextField
+import com.aca56.cahiersortiecodex.ui.components.AppTextFieldType
+import com.aca56.cahiersortiecodex.ui.components.SearchableSelectableList
 import com.aca56.cahiersortiecodex.ui.components.formatDateForDisplay
 import com.aca56.cahiersortiecodex.ui.components.rememberInteractionAwareValueChange
 
@@ -240,6 +248,8 @@ fun BoatDetailRoute(
             repairUpdateRepository = appContainer.repairUpdateRepository,
             sessionRepository = appContainer.sessionRepository,
             boatPhotoStorage = appContainer.boatPhotoStorage,
+            rowerRepository = appContainer.rowerRepository,
+            pinCodeStore = appContainer.pinCodeStore,
         ),
     )
     val uiState by viewModel.uiState.collectAsState()
@@ -279,6 +289,8 @@ fun BoatDetailRoute(
                     year = uiState.boat.year.toIntOrNull(),
                     notes = uiState.boat.notes,
                     weight = uiState.boat.weight.toDoubleOrNull(),
+                    requiredLevel = uiState.boat.requiredLevel,
+                    authorizedRowerIds = uiState.boat.authorizedRowerIds
                 ),
                 remarks = uiState.boat.remarks,
                 repairUpdates = uiState.boat.repairUpdatesByRemarkId.values.flatten(),
@@ -320,6 +332,9 @@ fun BoatDetailRoute(
         onRiggingPointeChanged = viewModel::onRiggingPointeChanged,
         onYearChanged = viewModel::onYearChanged,
         onNotesChanged = viewModel::onNotesChanged,
+        onRequiredLevelChanged = viewModel::onRequiredLevelChanged,
+        onAuthorizedRowerToggled = viewModel::onAuthorizedRowerToggled,
+        onRowerSearchQueryChanged = viewModel::onRowerSearchQueryChanged,
         onStartEditing = viewModel::startEditing,
         onCancelEditing = viewModel::cancelEditing,
         onSaveBoat = viewModel::saveBoat,
@@ -352,6 +367,9 @@ fun BoatDetailScreen(
     onRiggingPointeChanged: (Boolean) -> Unit,
     onYearChanged: (String) -> Unit,
     onNotesChanged: (String) -> Unit,
+    onRequiredLevelChanged: (BoatRequiredLevel) -> Unit,
+    onAuthorizedRowerToggled: (Long) -> Unit,
+    onRowerSearchQueryChanged: (String) -> Unit,
     onStartEditing: () -> Unit,
     onCancelEditing: () -> Unit,
     onSaveBoat: () -> Unit,
@@ -370,8 +388,11 @@ fun BoatDetailScreen(
     val trackedOnWeightChanged = rememberInteractionAwareValueChange(onWeightChanged)
     val trackedOnNotesChanged = rememberInteractionAwareValueChange(onNotesChanged)
     var typeMenuExpanded by remember { mutableStateOf(false) }
+    var levelMenuExpanded by remember { mutableStateOf(false) }
     var selectedPhotoPath by remember { mutableStateOf<String?>(null) }
     var showPhotoManager by remember { mutableStateOf(false) }
+    var showAuthorizedListPopup by remember { mutableStateOf(false) }
+    
     val isCompactScreen = LocalConfiguration.current.screenWidthDp < 600
     val horizontalPadding = if (isCompactScreen) 12.dp else 20.dp
     val verticalPadding = if (isCompactScreen) 12.dp else 18.dp
@@ -391,6 +412,27 @@ fun BoatDetailScreen(
             onDeletePhoto = onDeletePhoto,
             onViewPhoto = { selectedPhotoPath = it },
         )
+    }
+    
+    if (showAuthorizedListPopup) {
+        AppModalDialog(
+            title = "Rameurs autorisés",
+            onDismiss = { showAuthorizedListPopup = false },
+            buttons = {
+                TextButton(onClick = { showAuthorizedListPopup = false }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Fermer")
+                }
+            }
+        ) {
+            val authorized = uiState.authorizedRowerList
+            if (authorized.isEmpty()) {
+                Text("Aucun rameur n'est spécifiquement autorisé pour ce bateau.")
+            } else {
+                authorized.forEach { rower ->
+                    Text("• ${rower.displayName}", style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
     }
 
     Column(
@@ -504,7 +546,7 @@ fun BoatDetailScreen(
                         onWeightMaxChanged = onWeightMaxChanged,
                     )
 
-                    Text("Poids du bateau", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Poids réel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
                         text = "Renseignez le poids réel du bateau.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -534,6 +576,52 @@ fun BoatDetailScreen(
                         onValueChange = trackedOnNotesChanged,
                         label = "Notes",
                     )
+                    
+                    Text("Accréditations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "Définissez le niveau requis pour ce bateau.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AppBoatSelectorButton(
+                            label = "Niveau requis",
+                            value = uiState.boat.requiredLevel.label,
+                            onClick = { levelMenuExpanded = true },
+                        )
+                        DropdownMenu(
+                            expanded = levelMenuExpanded,
+                            onDismissRequest = { levelMenuExpanded = false },
+                        ) {
+                            BoatRequiredLevel.entries.forEach { level ->
+                                DropdownMenuItem(
+                                    text = { Text(level.label) },
+                                    onClick = {
+                                        onRequiredLevelChanged(level)
+                                        levelMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    
+                    if (uiState.boat.requiredLevel == BoatRequiredLevel.PERSONNALISE) {
+                        Text(
+                            text = "Sélectionnez les rameurs autorisés :",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        SearchableSelectableList(
+                            searchQuery = uiState.rowerSearchQuery,
+                            onSearchQueryChanged = onRowerSearchQueryChanged,
+                            searchLabel = "Chercher un rameur",
+                            selectedKeys = uiState.boat.authorizedRowerIdsSet.map { it.toString() }.toSet(),
+                            options = uiState.rowerOptions,
+                            onOptionToggled = { key -> key.toLongOrNull()?.let { onAuthorizedRowerToggled(it) } },
+                            emptyLabel = "Aucun rameur enregistré.",
+                            noResultsLabel = "Aucun rameur trouvé."
+                        )
+                    }
 
                     Button(
                         onClick = onSaveBoat,
@@ -575,6 +663,30 @@ fun BoatDetailScreen(
                         title = "Notes",
                         value = uiState.boat.notes.ifBlank { "Aucune note" },
                     )
+                    
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Niveau requis", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                                Text(uiState.boat.requiredLevel.label, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            if (uiState.boat.requiredLevel == BoatRequiredLevel.PERSONNALISE) {
+                                OutlinedButton(onClick = { showAuthorizedListPopup = true }) {
+                                    Text("Voir la liste")
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1053,6 +1165,7 @@ private fun BoatPhotoThumbnail(
     onClick: () -> Unit,
 ) {
     val bitmap = remember(filePath) { BitmapFactory.decodeFile(filePath) }
+    val context = LocalContext.current
     Surface(
         modifier = modifier
             .height(120.dp)
