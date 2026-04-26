@@ -17,8 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,9 +36,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
@@ -1274,17 +1278,49 @@ private fun RowerManagementSection(
 ) {
     val trackedOnFirstNameChanged = rememberInteractionAwareValueChange(onFirstNameChanged)
     val trackedOnLastNameChanged = rememberInteractionAwareValueChange(onLastNameChanged)
+    var showHelpDialog by remember { mutableStateOf(false) }
+
+    if (showHelpDialog) {
+        AppModalDialog(
+            title = "Aide à l'import des rameurs",
+            onDismiss = { showHelpDialog = false },
+            buttons = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text("Compris")
+                }
+            }
+        ) {
+            Text("Format accepté : Fichier CSV (.csv)")
+            Text("Structure du fichier (colonnes) :", fontWeight = FontWeight.Bold)
+            Text("1. Prénom\n2. Nom")
+            Text("Notes :", fontWeight = FontWeight.Bold)
+            Text("- Les en-têtes sont automatiquement détectés et ignorés.\n- Le délimiteur (virgule ou point-virgule) est détecté automatiquement.")
+        }
+    }
 
     SettingsSection(
         title = "Gérer les rameurs",
         description = "Ajouter, modifier, supprimer ou importer des rameurs.",
     ) {
-        OutlinedButton(
-            onClick = onImportRowers,
-            enabled = !uiState.isWorking,
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Importer des rameurs")
+            OutlinedButton(
+                onClick = onImportRowers,
+                enabled = !uiState.isWorking,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (uiState.isWorking) "Traitement..." else "Importer des rameurs")
+            }
+            IconButton(onClick = { showHelpDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Aide à l'import",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
         AppTextField(
             value = uiState.rowerManagement.firstNameInput,
@@ -1313,7 +1349,7 @@ private fun RowerManagementSection(
             }
             if (uiState.rowerManagement.isEditing) {
                 OutlinedButton(
-                    onClick = onCancelEditing,
+                    onClick = { onCancelEditing() },
                     enabled = !uiState.isWorking,
                     modifier = Modifier.weight(1f),
                 ) {
@@ -1353,17 +1389,49 @@ private fun BoatManagementSection(
 ) {
     val trackedOnBoatNameChanged = rememberInteractionAwareValueChange(onBoatNameChanged)
     val trackedOnBoatSeatCountChanged = rememberInteractionAwareValueChange(onBoatSeatCountChanged)
+    var showHelpDialog by remember { mutableStateOf(false) }
+
+    if (showHelpDialog) {
+        AppModalDialog(
+            title = "Aide à l'import des bateaux",
+            onDismiss = { showHelpDialog = false },
+            buttons = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text("Compris")
+                }
+            }
+        ) {
+            Text("Format accepté : Fichier CSV (.csv)")
+            Text("Structure du fichier (8 colonnes dans l'ordre) :", fontWeight = FontWeight.Bold)
+            Text("1. Nom du bateau\n2. Nombre de places\n3. Type (ex: 1x, 2-, 8+...)\n4. Porteur (ex: 70-85 kg)\n5. Poids réel (kg)\n6. Armement (Couple, Pointe, ou Couple/Pointe)\n7. Année\n8. Notes")
+            Text("Notes :", fontWeight = FontWeight.Bold)
+            Text("- Année : nombre à 4 chiffres.\n- Places : nombre entier supérieur à 0.\n- Les en-têtes sont détectés automatiquement.")
+        }
+    }
 
     SettingsSection(
         title = "Gérer les bateaux",
         description = "Ajouter, modifier ou supprimer des bateaux et leur nombre de places.",
     ) {
-        OutlinedButton(
-            onClick = onImportBoats,
-            enabled = !uiState.isWorking,
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Importer des bateaux (CSV)")
+            OutlinedButton(
+                onClick = onImportBoats,
+                enabled = !uiState.isWorking,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (uiState.isWorking) "Traitement..." else "Importer des bateaux (CSV)")
+            }
+            IconButton(onClick = { showHelpDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Aide à l'import",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
         AppTextField(
             value = uiState.boatManagement.boatNameInput,
@@ -1392,7 +1460,7 @@ private fun BoatManagementSection(
             }
             if (uiState.boatManagement.isEditing) {
                 OutlinedButton(
-                    onClick = onCancelBoatEditing,
+                    onClick = { onCancelBoatEditing() },
                     enabled = !uiState.isWorking,
                     modifier = Modifier.weight(1f),
                 ) {
@@ -1458,7 +1526,7 @@ private fun DestinationManagementSection(
             }
             if (uiState.destinationManagement.isEditing) {
                 OutlinedButton(
-                    onClick = onCancelDestinationEditing,
+                    onClick = { onCancelDestinationEditing() },
                     enabled = !uiState.isWorking,
                     modifier = Modifier.weight(1f),
                 ) {
@@ -1949,12 +2017,12 @@ private fun BackupSection(
     ) {
         ExportActionButton(
             text = if (uiState.isWorking) "Traitement..." else "Exporter la base de données complète",
-            onClick = onExportFullDatabase,
+            onClick = { onExportFullDatabase() },
             enabled = !uiState.isWorking,
         )
         ExportActionButton(
             text = if (uiState.isWorking) "Traitement..." else "Restaurer la base depuis un ZIP",
-            onClick = onRestoreBackup,
+            onClick = { onRestoreBackup() },
             enabled = !uiState.isWorking,
         )
     }

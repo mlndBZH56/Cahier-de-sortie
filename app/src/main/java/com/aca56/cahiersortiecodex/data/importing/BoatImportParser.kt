@@ -10,7 +10,7 @@ import java.util.Locale
 object BoatImportParser {
     fun parse(contentResolver: ContentResolver, uri: Uri): List<BoatEntity> {
         contentResolver.openInputStream(uri)?.use { inputStream ->
-            val rows = BufferedReader(InputStreamReader(inputStream)).readLines()
+            val rows = BufferedReader(InputStreamReader(inputStream, "UTF-8")).readLines()
                 .filter { it.isNotBlank() }
                 .map { it.trim() }
 
@@ -29,14 +29,43 @@ object BoatImportParser {
     }
 
     private fun toBoatEntity(columns: List<String>): BoatEntity? {
+        // Col 1: Name
         val name = columns.getOrNull(0)?.trim().orEmpty()
+        // Col 2: Seat count
         val seatCount = columns.getOrNull(1)?.trim()?.toIntOrNull()
 
         if (name.isBlank() || seatCount == null) return null
 
+        // Col 3: Type (ex: 1x, 2x...)
+        val type = columns.getOrNull(2)?.trim().orEmpty()
+        // Col 4: Weight range (Porteur)
+        val weightRange = columns.getOrNull(3)?.trim().orEmpty()
+        // Col 5: Weight (Poids réel)
+        val weight = columns.getOrNull(4)?.trim()?.replace(',', '.')?.toDoubleOrNull()
+        
+        // Col 6: Rigging type (Armement)
+        val riggingRaw = columns.getOrNull(5)?.trim().orEmpty()
+        val riggingCouple = riggingRaw.contains("Couple", ignoreCase = true)
+        val riggingPointe = riggingRaw.contains("Pointe", ignoreCase = true)
+        val riggingType = buildList {
+            if (riggingCouple) add("Couple")
+            if (riggingPointe) add("Pointe")
+        }.joinToString(" / ")
+
+        // Col 7: Year
+        val year = columns.getOrNull(6)?.trim()?.toIntOrNull()
+        // Col 8: Notes
+        val notes = columns.getOrNull(7)?.trim().orEmpty()
+
         return BoatEntity(
             name = name,
             seatCount = seatCount,
+            type = type,
+            weightRange = weightRange,
+            weight = weight,
+            riggingType = riggingType,
+            year = year,
+            notes = notes,
         )
     }
 
@@ -76,7 +105,7 @@ object BoatImportParser {
     private fun looksLikeHeader(columns: List<String>): Boolean {
         val normalized = columns.map { it.lowercase(Locale.ROOT).replace(" ", "") }
         return normalized.size >= 2 && (
-            normalized[0] in setOf("boat", "boatname", "name") ||
+            normalized[0] in setOf("boat", "boatname", "name", "nom") ||
                 normalized[1] in setOf("seatcount", "seats", "places")
             )
     }

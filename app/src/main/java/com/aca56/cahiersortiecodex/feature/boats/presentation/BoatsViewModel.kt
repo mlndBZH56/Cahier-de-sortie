@@ -63,6 +63,7 @@ data class BoatDetailUi(
     val weightSingleValue: String = "",
     val weightMinValue: String = "",
     val weightMaxValue: String = "",
+    val weight: String = "",
     val useWeightRange: Boolean = false,
     val riggingCouple: Boolean = false,
     val riggingPointe: Boolean = false,
@@ -86,6 +87,9 @@ data class BoatDetailUi(
             weightSingleValue.isNotBlank() -> "${weightSingleValue} kg"
             else -> "Non défini"
         }
+
+    val weightDisplay: String
+        get() = if (weight.isNotBlank()) "$weight kg" else "Non défini"
 
     val riggingTypeDisplay: String
         get() = buildList {
@@ -234,6 +238,17 @@ class BoatDetailViewModel(
         updateBoatFields { copy(weightMaxValue = sanitizeWeightValue(value)) }
     }
 
+    fun onWeightChanged(value: String) {
+        // Allows digits and a single decimal separator (dot or comma)
+        val sanitized = value.replace(',', '.').filter { it.isDigit() || it == '.' }
+        val finalValue = if (sanitized.count { it == '.' } > 1) {
+            sanitized.substringBeforeLast(".")
+        } else {
+            sanitized
+        }
+        updateBoatFields { copy(weight = finalValue) }
+    }
+
     fun onUseWeightRangeChanged(enabled: Boolean) {
         updateBoatFields {
             if (enabled) {
@@ -316,6 +331,7 @@ class BoatDetailViewModel(
             riggingType = buildRiggingValue(state.boat),
             year = state.boat.year.toIntOrNull(),
             notes = state.boat.notes.trim(),
+            weight = state.boat.weight.toDoubleOrNull(),
         )
 
         viewModelScope.launch {
@@ -521,6 +537,7 @@ class BoatDetailViewModel(
             weightSingleValue = parseWeightSingleValue(weightRange),
             weightMinValue = parseWeightMinValue(weightRange),
             weightMaxValue = parseWeightMaxValue(weightRange),
+            weight = weight?.toString().orEmpty(),
             useWeightRange = parseWeightMinValue(weightRange).isNotBlank() && parseWeightMaxValue(weightRange).isNotBlank(),
             riggingCouple = riggingType.contains("Couple", ignoreCase = true),
             riggingPointe = riggingType.contains("Pointe", ignoreCase = true),

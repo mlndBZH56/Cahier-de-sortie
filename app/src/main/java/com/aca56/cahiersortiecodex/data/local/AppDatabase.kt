@@ -40,7 +40,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
         RemarkEntity::class,
         RepairUpdateEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 @TypeConverters(SessionStatusConverter::class, RemarkStatusConverter::class)
@@ -94,7 +94,14 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     DATABASE_NAME,
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                ).addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                    MIGRATION_6_7,
+                )
                     .build()
                     .also { INSTANCE = it }
             }
@@ -303,6 +310,12 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE remarks_new RENAME TO remarks")
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_boatId ON remarks(boatId)")
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_remarks_sessionId ON remarks(sessionId)")
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE boats ADD COLUMN weight REAL")
             }
         }
     }

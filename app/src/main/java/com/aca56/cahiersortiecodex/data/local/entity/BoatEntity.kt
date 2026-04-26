@@ -14,4 +14,5 @@ data class BoatEntity(
     val riggingType: String = "",
     val year: Int? = null,
     val notes: String = "",
+    val weight: Double? = null,
 )

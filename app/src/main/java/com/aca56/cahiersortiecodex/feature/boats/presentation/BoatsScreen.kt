@@ -278,6 +278,7 @@ fun BoatDetailRoute(
                     riggingType = uiState.boat.riggingTypeDisplay.takeUnless { it == "Non défini" }.orEmpty(),
                     year = uiState.boat.year.toIntOrNull(),
                     notes = uiState.boat.notes,
+                    weight = uiState.boat.weight.toDoubleOrNull(),
                 ),
                 remarks = uiState.boat.remarks,
                 repairUpdates = uiState.boat.repairUpdatesByRemarkId.values.flatten(),
@@ -313,6 +314,7 @@ fun BoatDetailRoute(
         onWeightSingleChanged = viewModel::onWeightSingleChanged,
         onWeightMinChanged = viewModel::onWeightMinChanged,
         onWeightMaxChanged = viewModel::onWeightMaxChanged,
+        onWeightChanged = viewModel::onWeightChanged,
         onUseWeightRangeChanged = viewModel::onUseWeightRangeChanged,
         onRiggingCoupleChanged = viewModel::onRiggingCoupleChanged,
         onRiggingPointeChanged = viewModel::onRiggingPointeChanged,
@@ -344,6 +346,7 @@ fun BoatDetailScreen(
     onWeightSingleChanged: (String) -> Unit,
     onWeightMinChanged: (String) -> Unit,
     onWeightMaxChanged: (String) -> Unit,
+    onWeightChanged: (String) -> Unit,
     onUseWeightRangeChanged: (Boolean) -> Unit,
     onRiggingCoupleChanged: (Boolean) -> Unit,
     onRiggingPointeChanged: (Boolean) -> Unit,
@@ -364,6 +367,7 @@ fun BoatDetailScreen(
     val trackedOnNameChanged = rememberInteractionAwareValueChange(onNameChanged)
     val trackedOnSeatCountChanged = rememberInteractionAwareValueChange(onSeatCountChanged)
     val trackedOnYearChanged = rememberInteractionAwareValueChange(onYearChanged)
+    val trackedOnWeightChanged = rememberInteractionAwareValueChange(onWeightChanged)
     val trackedOnNotesChanged = rememberInteractionAwareValueChange(onNotesChanged)
     var typeMenuExpanded by remember { mutableStateOf(false) }
     var selectedPhotoPath by remember { mutableStateOf<String?>(null) }
@@ -470,6 +474,7 @@ fun BoatDetailScreen(
                         value = uiState.boat.seatCount,
                         onValueChange = trackedOnSeatCountChanged,
                         label = "Nombre de places",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                     Box(modifier = Modifier.fillMaxWidth()) {
                             AppBoatSelectorButton(
@@ -499,6 +504,18 @@ fun BoatDetailScreen(
                         onWeightMaxChanged = onWeightMaxChanged,
                     )
 
+                    Text("Poids du bateau", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "Renseignez le poids réel du bateau.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    AppBoatTextField(
+                        value = uiState.boat.weight,
+                        onValueChange = trackedOnWeightChanged,
+                        label = "Poids (kg)",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+
                     RiggingTypeEditor(
                         coupleChecked = uiState.boat.riggingCouple,
                         pointeChecked = uiState.boat.riggingPointe,
@@ -510,6 +527,7 @@ fun BoatDetailScreen(
                         value = uiState.boat.year,
                         onValueChange = trackedOnYearChanged,
                         label = "Année",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                     AppBoatTextField(
                         value = uiState.boat.notes,
@@ -540,6 +558,10 @@ fun BoatDetailScreen(
                     BoatInfoSheet(
                         title = "Porteur",
                         value = uiState.boat.weightRangeDisplay,
+                    )
+                    BoatInfoSheet(
+                        title = "Poids",
+                        value = uiState.boat.weightDisplay,
                     )
                     BoatInfoSheet(
                         title = "Type d’armement",
@@ -769,15 +791,14 @@ private fun AppBoatTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Text,
-        ),
+        keyboardOptions = keyboardOptions,
         singleLine = true,
         maxLines = 1,
     )
