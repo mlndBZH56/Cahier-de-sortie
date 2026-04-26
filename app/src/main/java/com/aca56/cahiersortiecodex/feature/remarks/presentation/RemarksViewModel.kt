@@ -558,7 +558,7 @@ class RemarksViewModel(
                     details = buildString {
                         append("Remarque ")
                         append(if (editingRemark == null) "ajoutée" else "mise à jour")
-                        append(" avec le statut ${state.editorStatus.name}.")
+                        append(" avec le statut ${state.editorStatus.logLabel()}.")
                     },
                 )
                 uiStateMutable.update {
@@ -636,7 +636,7 @@ class RemarksViewModel(
             }.onSuccess {
                 appLogStore.logAction(
                     actionType = "Suppression de remarque",
-                    details = "Suppression d'une remarque (${remark.status.name}).",
+                    details = "Suppression d'une remarque (${remark.status.logLabel()}).",
                 )
                 uiStateMutable.update {
                     val resetEditor = it.editingRemarkKey == remark.key
@@ -943,6 +943,14 @@ class RemarksViewModel(
 private fun currentRepairUpdateTimestamp(): String {
     return java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         .format(java.util.Date())
+}
+
+private fun RemarkStatus.logLabel(): String {
+    return when (this) {
+        RemarkStatus.NORMAL -> "normale"
+        RemarkStatus.REPAIR_NEEDED -> "réparation nécessaire"
+        RemarkStatus.REPAIRED -> "réparée"
+    }
 }
 
 private fun RemarkStatus.priority(): Int {

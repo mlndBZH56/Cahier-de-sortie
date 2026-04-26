@@ -1064,7 +1064,7 @@ private fun SettingsContent(
                                 SystemToolsSection(
                                     uiState = uiState,
                                     onResetAllAppData = { showResetDialog = true },
-                                    onExportLogs = { showLogsExportDialog = true },
+                                    onExportLogs = { _ -> showLogsExportDialog = true },
                                 )
                                 DataCleanupSection(
                                     uiState = uiState,
@@ -1151,7 +1151,7 @@ private fun SettingsContent(
                         SystemToolsSection(
                             uiState = uiState,
                             onResetAllAppData = { showResetDialog = true },
-                            onExportLogs = { showLogsExportDialog = true },
+                            onExportLogs = { _ -> showLogsExportDialog = true },
                         )
                         DataCleanupSection(
                             uiState = uiState,
@@ -1981,6 +1981,7 @@ fun SettingsRowersRoute(
         onEdit = viewModel::startEditingRower,
         onCancelEditing = viewModel::cancelRowerEditing,
         onDelete = viewModel::deleteRower,
+        onDismissFeedback = viewModel::clearMessage,
         onImportRowers = {
             viewModel.clearMessage()
             rowerImportLauncher.launch(
@@ -2016,6 +2017,7 @@ fun SettingsBoatsRoute(
         onEditBoat = viewModel::startEditingBoat,
         onCancelBoatEditing = viewModel::cancelBoatEditing,
         onDeleteBoat = viewModel::deleteBoat,
+        onDismissFeedback = viewModel::clearMessage,
         onImportBoats = {
             viewModel.clearMessage()
             boatImportLauncher.launch(
@@ -2043,6 +2045,7 @@ fun SettingsDestinationsRoute(
         onEditDestination = viewModel::startEditingDestination,
         onCancelDestinationEditing = viewModel::cancelDestinationEditing,
         onDeleteDestination = viewModel::deleteDestination,
+        onDismissFeedback = viewModel::clearMessage,
     )
 }
 
@@ -2056,27 +2059,41 @@ private fun RowerManagementScreen(
     onEdit: (RowerEntity) -> Unit,
     onCancelEditing: () -> Unit,
     onDelete: (RowerEntity) -> Unit,
+    onDismissFeedback: () -> Unit,
     onImportRowers: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(contentPadding),
     ) {
-        Text("Gérer les rameurs", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        RowerManagementSection(
-            uiState = uiState,
-            onFirstNameChanged = onFirstNameChanged,
-            onLastNameChanged = onLastNameChanged,
-            onSave = onSave,
-            onEdit = onEdit,
-            onCancelEditing = onCancelEditing,
-            onDelete = onDelete,
-            onImportRowers = onImportRowers,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text("Gérer les rameurs", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            RowerManagementSection(
+                uiState = uiState,
+                onFirstNameChanged = onFirstNameChanged,
+                onLastNameChanged = onLastNameChanged,
+                onSave = onSave,
+                onEdit = onEdit,
+                onCancelEditing = onCancelEditing,
+                onDelete = onDelete,
+                onImportRowers = onImportRowers,
+            )
+        }
+
+        uiState.message?.let { message ->
+            FeedbackDialog(
+                message = message,
+                type = uiState.messageType ?: FeedbackDialogType.SUCCESS,
+                onDismiss = onDismissFeedback,
+            )
+        }
     }
 }
 
@@ -2090,27 +2107,41 @@ private fun BoatManagementScreen(
     onEditBoat: (BoatEntity) -> Unit,
     onCancelBoatEditing: () -> Unit,
     onDeleteBoat: (BoatEntity) -> Unit,
+    onDismissFeedback: () -> Unit,
     onImportBoats: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(contentPadding),
     ) {
-        Text("Gérer les bateaux", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        BoatManagementSection(
-            uiState = uiState,
-            onBoatNameChanged = onBoatNameChanged,
-            onBoatSeatCountChanged = onBoatSeatCountChanged,
-            onSaveBoat = onSaveBoat,
-            onEditBoat = onEditBoat,
-            onCancelBoatEditing = onCancelBoatEditing,
-            onDeleteBoat = onDeleteBoat,
-            onImportBoats = onImportBoats,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text("Gérer les bateaux", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            BoatManagementSection(
+                uiState = uiState,
+                onBoatNameChanged = onBoatNameChanged,
+                onBoatSeatCountChanged = onBoatSeatCountChanged,
+                onSaveBoat = onSaveBoat,
+                onEditBoat = onEditBoat,
+                onCancelBoatEditing = onCancelBoatEditing,
+                onDeleteBoat = onDeleteBoat,
+                onImportBoats = onImportBoats,
+            )
+        }
+
+        uiState.message?.let { message ->
+            FeedbackDialog(
+                message = message,
+                type = uiState.messageType ?: FeedbackDialogType.SUCCESS,
+                onDismiss = onDismissFeedback,
+            )
+        }
     }
 }
 
@@ -2123,17 +2154,31 @@ private fun DestinationManagementScreen(
     onEditDestination: (DestinationEntity) -> Unit,
     onCancelDestinationEditing: () -> Unit,
     onDeleteDestination: (DestinationEntity) -> Unit,
+    onDismissFeedback: () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(contentPadding),
     ) {
-        Text("Gérer les destinations", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        DestinationManagementSection(uiState, onDestinationNameChanged, onSaveDestination, onEditDestination, onCancelDestinationEditing, onDeleteDestination)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text("Gérer les destinations", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            DestinationManagementSection(uiState, onDestinationNameChanged, onSaveDestination, onEditDestination, onCancelDestinationEditing, onDeleteDestination)
+        }
+
+        uiState.message?.let { message ->
+            FeedbackDialog(
+                message = message,
+                type = uiState.messageType ?: FeedbackDialogType.SUCCESS,
+                onDismiss = onDismissFeedback,
+            )
+        }
     }
 }
 

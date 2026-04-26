@@ -1069,6 +1069,16 @@ class SettingsViewModel(
                     importedCount
                 }
             },
+            onSuccessResult = { importedCount ->
+                appLogStore.logAction(
+                    actionType = "Import de rameurs",
+                    details = if (importedCount == 0) {
+                        "Aucun nouveau rameur importé."
+                    } else {
+                        "$importedCount rameur(s) importé(s)."
+                    },
+                )
+            },
         ) { importedCount ->
             if (importedCount == 0) {
                 "Aucun nouveau rameur n'a été importé."
@@ -1107,6 +1117,16 @@ class SettingsViewModel(
 
                     importedCount
                 }
+            },
+            onSuccessResult = { importedCount ->
+                appLogStore.logAction(
+                    actionType = "Import de bateaux",
+                    details = if (importedCount == 0) {
+                        "Aucun nouveau bateau importé."
+                    } else {
+                        "$importedCount bateau(x) importé(s)."
+                    },
+                )
             },
         ) { importedCount ->
             if (importedCount == 0) {
@@ -1996,6 +2016,7 @@ class SettingsViewModel(
     private fun <T> launchWorkWithResult(
         onErrorMessage: String,
         block: suspend () -> T,
+        onSuccessResult: ((T) -> Unit)? = null,
         successMessage: (T) -> String,
     ) {
         viewModelScope.launch {
@@ -2003,6 +2024,7 @@ class SettingsViewModel(
 
             runCatching { block() }
                 .onSuccess { result ->
+                    onSuccessResult?.invoke(result)
                     uiStateMutable.update {
                         it.copy(
                             isWorking = false,

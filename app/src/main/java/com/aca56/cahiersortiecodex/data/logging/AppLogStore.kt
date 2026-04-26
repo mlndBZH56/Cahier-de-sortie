@@ -4,10 +4,12 @@ import android.content.Context
 import android.net.Uri
 import java.io.File
 import java.io.IOException
+import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.text.Charsets.UTF_8
 
 enum class AppLogCategory(val label: String) {
     ACTIONS("Actions"),
@@ -46,7 +48,7 @@ class AppLogStore(
     private val logFile = File(logsDir, "journal_actions.csv")
     private val timestampFormatter = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
     private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    private val header = "horodatage;categorie;type_action;details"
+    private val header = "horodatage;catégorie;type_action;détail"
 
     init {
         ensureStructuredFile()
@@ -70,6 +72,7 @@ class AppLogStore(
                 append(escape(details))
                 append('\n')
             },
+            charset = UTF_8,
         )
     }
 
@@ -104,17 +107,21 @@ class AppLogStore(
                 entry.matchesDate(filters)
         }
 
-        appContext.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
-            writer.appendLine(header)
-            filteredEntries.forEach { entry ->
-                writer.appendLine(
-                    listOf(
-                        escape(entry.timestampLabel),
-                        escape(entry.category.label),
-                        escape(entry.actionType),
-                        escape(entry.details),
-                    ).joinToString(";"),
-                )
+        appContext.contentResolver.openOutputStream(uri)?.use { output ->
+            output.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+            OutputStreamWriter(output, UTF_8).use { writer ->
+                writer.appendLine(header)
+                filteredEntries.forEach { entry ->
+                    writer.appendLine(
+                        listOf(
+                            escape(entry.timestampLabel),
+                            escape(entry.category.label),
+                            escape(entry.actionType),
+                            escape(entry.details),
+                        ).joinToString(";"),
+                    )
+                }
+                writer.flush()
             }
         } ?: throw IOException("Impossible d'ouvrir la destination d'export des logs.")
     }
@@ -198,13 +205,13 @@ class AppLogStore(
     private fun ensureStructuredFile() {
         if (!logFile.exists()) {
             logFile.parentFile?.mkdirs()
-            logFile.writeText("$header\n")
+            logFile.writeText("$header\n", UTF_8)
             return
         }
 
         val lines = logFile.readLines()
         if (lines.isEmpty()) {
-            logFile.writeText("$header\n")
+            logFile.writeText("$header\n", UTF_8)
             return
         }
 
@@ -244,7 +251,8 @@ class AppLogStore(
                 }
             }
 
-        logFile.bufferedWriter().use { writer ->
+        logFile.outputStream().buffered().use { output ->
+            OutputStreamWriter(output, UTF_8).use { writer ->
             writer.appendLine(header)
             migratedEntries.forEach { entry ->
                 writer.appendLine(
@@ -255,6 +263,8 @@ class AppLogStore(
                         escape(entry.details),
                     ).joinToString(";"),
                 )
+            }
+                writer.flush()
             }
         }
     }
