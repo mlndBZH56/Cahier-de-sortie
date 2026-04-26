@@ -68,7 +68,7 @@ object DatabaseCsvExporter {
                 )
                 zipStream.writeCsvEntry(
                     entryName = "bateaux.csv",
-                    headers = listOf("Nom", "Places", "Type d’armement", "Poids", "Armement", "Année", "Notes"),
+                    headers = listOf("Nom", "Places", "Type d’armement", "Porteur", "Armement", "Année", "Notes"),
                     rows = boats.map { boat ->
                         listOf(
                             boat.name,
@@ -286,7 +286,7 @@ object DatabaseCsvExporter {
             headers = listOf(
                 "Nom",
                 "Type d’armement",
-                "Poids",
+                "Porteur",
                 "Armement",
                 "Année",
                 "Notes",

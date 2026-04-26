@@ -460,8 +460,6 @@ fun NewSessionScreen(
                     )
                     }
                 }
-            } else {
-                QuickModeInfoCard()
             }
 
             SectionCard(
@@ -884,19 +882,6 @@ private fun ModeToggleCard(
             completeButton(Modifier.weight(1f))
             quickButton(Modifier.weight(1f))
         }
-    }
-}
-
-@Composable
-private fun QuickModeInfoCard() {
-    SectionCard(
-        title = "Mode rapide",
-        description = "Seuls le bateau et les rameurs sont affichés. L'heure de départ sera définie automatiquement au démarrage.",
-    ) {
-        Text(
-            text = "Le démarrage de la sortie crée directement une sortie en cours.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

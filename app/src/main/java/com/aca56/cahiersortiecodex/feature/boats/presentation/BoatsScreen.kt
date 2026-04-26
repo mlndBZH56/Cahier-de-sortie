@@ -538,7 +538,7 @@ fun BoatDetailScreen(
                         value = uiState.boat.type.ifBlank { "Non défini" },
                     )
                     BoatInfoSheet(
-                        title = "Plage de poids",
+                        title = "Porteur",
                         value = uiState.boat.weightRangeDisplay,
                     )
                     BoatInfoSheet(
@@ -839,9 +839,9 @@ private fun WeightRangeEditor(
 ) {
     var minExpanded by remember { mutableStateOf(false) }
     var maxExpanded by remember { mutableStateOf(false) }
-    val weightOptions = (30..120 step 5).map { it.toString() }
+    val weightOptions = (30..150 step 5).map { it.toString() }
 
-    Text("Poids", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text("Porteur", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Text(
         text = "Choisissez un minimum et un maximum par pas de 5 kg.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
