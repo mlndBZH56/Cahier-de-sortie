@@ -10,6 +10,8 @@ import java.util.Date
 import java.util.Locale
 import com.aca56.cahiersortiecodex.data.backup.DatabaseBackupManager
 import com.aca56.cahiersortiecodex.data.crew.CrewStore
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
+import com.aca56.cahiersortiecodex.data.logging.AppLogger
 import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.AppDatabase
 import com.aca56.cahiersortiecodex.data.media.BoatPhotoStorage
@@ -48,7 +50,7 @@ class AppContainer(context: Context) {
         CrewStore(appContext)
     }
     val appLogStore: AppLogStore by lazy {
-        AppLogStore(appContext)
+        AppLogStore(appContext).also(AppLogger::initialize)
     }
     val backupManager: DatabaseBackupManager by lazy {
         DatabaseBackupManager(
@@ -100,10 +102,35 @@ class AppContainer(context: Context) {
     init {
         appScope.launch {
             sessionRepository.archiveExpiredOngoingSessions(currentStorageDate())
+            runAutomaticRowerCleanupIfEnabled()
         }
+    }
+
+    private suspend fun runAutomaticRowerCleanupIfEnabled() {
+        val preferences = appPreferencesStore.currentPreferences()
+        if (!preferences.automaticRowerCleanupEnabled) return
+
+        val cutoffDate = storageDateMonthsAgo(preferences.rowerInactivityCleanupMonths)
+        val inactiveRowers = rowerRepository.getInactiveRowers(cutoffDate)
+        if (inactiveRowers.isEmpty()) return
+
+        val deletedCount = rowerRepository.deleteRowers(inactiveRowers)
+        appLogStore.logWarning(
+            category = AppLogCategory.ACTIONS,
+            actionType = "Nettoyage automatique des rameurs inactifs",
+            entity = "Rameur",
+            details = "Nombre : $deletedCount. Durée : ${preferences.rowerInactivityCleanupMonths} mois.",
+        )
     }
 }
 
 private fun currentStorageDate(): String {
     return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+}
+
+private fun storageDateMonthsAgo(months: Int): String {
+    val calendar = java.util.Calendar.getInstance().apply {
+        add(java.util.Calendar.MONTH, -months.coerceAtLeast(1))
+    }
+    return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
 }

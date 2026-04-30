@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aca56.cahiersortiecodex.data.crew.CrewStore
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
 import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
@@ -368,8 +369,10 @@ class NewSessionViewModel(
             runCatching {
                 uris.map { uri -> boatPhotoStorage.importCompressedPhoto(uri) }
             }.onSuccess { paths ->
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Ajout de photos",
+                    entity = "Remarque",
                     details = "Ajout de ${paths.size} photo(s) à la remarque de session en cours de saisie.",
                 )
                 uiStateMutable.update {
@@ -383,6 +386,7 @@ class NewSessionViewModel(
             }.onFailure {
                 appLogStore.logError(
                     actionType = "Échec d'enregistrement de session",
+                    entity = "Session",
                     details = "La session n'a pas pu être enregistrée.",
                 )
                 uiStateMutable.update {
@@ -401,8 +405,10 @@ class NewSessionViewModel(
             runCatching {
                 boatPhotoStorage.saveCompressedBitmap(bitmap)
             }.onSuccess { path ->
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Ajout de photo",
+                    entity = "Remarque",
                     details = "Ajout d'une photo à la remarque de session en cours de saisie.",
                 )
                 uiStateMutable.update {
@@ -427,8 +433,10 @@ class NewSessionViewModel(
 
     fun removeSessionRemarkPhoto(path: String) {
         boatPhotoStorage.deletePhoto(path)
-        appLogStore.logAction(
+        appLogStore.logWarning(
+            category = AppLogCategory.ACTIONS,
             actionType = "Suppression de photo",
+            entity = "Remarque",
             details = "Suppression d'une photo de la remarque de session en cours de saisie.",
         )
         uiStateMutable.update {
@@ -795,9 +803,11 @@ class NewSessionViewModel(
                     existingLinkedRemark?.let { remarkRepository.deleteRemark(it) }
                 }
             }.onSuccess {
-                appLogStore.logAction(
-                    actionType = if (currentState.isEditMode) "Modification de session" else "Création de session",
-                    details = buildString {
+            appLogStore.logInfo(
+                category = AppLogCategory.ACTIONS,
+                actionType = if (currentState.isEditMode) "Modification de session" else "Création de session",
+                entity = "Session",
+                details = buildString {
                         append(if (currentState.isQuickMode && !currentState.isEditMode) "Sortie rapide" else "Session")
                         append(" enregistrée pour le bateau ${selectedBoat.name}. ")
                         append("${currentState.totalSelectedRowers} rameur(s) sélectionné(s).")

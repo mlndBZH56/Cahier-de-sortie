@@ -10,6 +10,7 @@ import com.aca56.cahiersortiecodex.data.export.DatabaseCsvExporter
 import com.aca56.cahiersortiecodex.data.export.SessionCsvExporter
 import com.aca56.cahiersortiecodex.data.importing.BoatImportParser
 import com.aca56.cahiersortiecodex.data.importing.RowerImportParser
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
 import com.aca56.cahiersortiecodex.data.logging.AppLogExportFilters
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
@@ -65,10 +66,23 @@ data class RowerManagementUi(
     val editingRowerId: Long? = null,
     val firstNameInput: String = "",
     val lastNameInput: String = "",
+    val isBulkSelectionMode: Boolean = false,
+    val selectedRowerIds: Set<Long> = emptySet(),
+    val automaticCleanupEnabled: Boolean = false,
+    val cleanupMonthsInput: String = "12",
+    val cleanupPreview: RowerCleanupPreview? = null,
 ) {
     val isEditing: Boolean
         get() = editingRowerId != null
+
+    val selectedRowers: List<RowerEntity>
+        get() = rowers.filter { it.id in selectedRowerIds }
 }
+
+data class RowerCleanupPreview(
+    val cutoffDate: String,
+    val rowers: List<RowerEntity>,
+)
 
 data class BoatManagementUi(
     val boats: List<BoatEntity> = emptyList(),
@@ -98,6 +112,7 @@ data class SettingsUiState(
     val hasPin: Boolean = false,
     val isUnlocked: Boolean = false,
     val isSuperAdmin: Boolean = false,
+    val isEmergencyAccess: Boolean = false,
     val pinInput: String = "",
     val currentPinInput: String = "",
     val newPinInput: String = "",
@@ -293,6 +308,7 @@ class SettingsViewModel(
                 hasPin = hasPin,
                 isUnlocked = if (shouldRequirePin) false else it.isUnlocked,
                 isSuperAdmin = if (shouldRequirePin) false else it.isSuperAdmin,
+                isEmergencyAccess = if (shouldRequirePin) false else it.isEmergencyAccess,
                 pinInput = if (shouldRequirePin) "" else it.pinInput,
                 currentPinInput = if (shouldRequirePin) "" else it.currentPinInput,
                 newPinInput = if (shouldRequirePin) "" else it.newPinInput,
@@ -396,6 +412,32 @@ class SettingsViewModel(
         uiStateMutable.update { it.copy(crewsEnabled = value, message = null, messageType = null) }
     }
 
+    fun onRowerAutomaticCleanupEnabledChanged(value: Boolean) {
+        uiStateMutable.update {
+            it.copy(
+                rowerManagement = it.rowerManagement.copy(
+                    automaticCleanupEnabled = value,
+                    cleanupPreview = null,
+                ),
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun onRowerCleanupMonthsChanged(value: String) {
+        uiStateMutable.update {
+            it.copy(
+                rowerManagement = it.rowerManagement.copy(
+                    cleanupMonthsInput = value.filter(Char::isDigit),
+                    cleanupPreview = null,
+                ),
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
     fun onPrimaryColorChanged(value: String) {
         uiStateMutable.update { it.copy(primaryColorInput = value.uppercase(), message = null, messageType = null) }
     }
@@ -424,8 +466,10 @@ class SettingsViewModel(
         }
 
         pinCodeStore.saveNormalPin(pin)
-        appLogStore.logSecurity(
+        appLogStore.logInfo(
+            category = AppLogCategory.SECURITY,
             actionType = "Création du PIN",
+            entity = "Sécurité",
             details = "Un nouveau code PIN standard a été enregistré.",
         )
         uiStateMutable.update {
@@ -447,33 +491,71 @@ class SettingsViewModel(
         val enteredPin = uiState.value.pinInput.trim()
         val isSuperAdmin = pinCodeStore.verifySuperAdminPin(enteredPin)
         val isNormalUser = pinCodeStore.verifyNormalPin(enteredPin)
+        val isEmergencyAccess = !isSuperAdmin && pinCodeStore.verifyEmergencySuperAdminPin(enteredPin)
 
-        if (!isSuperAdmin && !isNormalUser) {
-            appLogStore.logSecurity(
+        if (!isSuperAdmin && !isNormalUser && !isEmergencyAccess) {
+            appLogStore.logWarning(
+                category = AppLogCategory.SECURITY,
                 actionType = "Échec de déverrouillage",
+                entity = "Sécurité",
                 details = "Tentative d'accès aux paramètres avec un code PIN incorrect.",
             )
             uiStateMutable.update { it.copy(message = "Le code PIN est incorrect. Veuillez réessayer.", messageType = FeedbackDialogType.ERROR) }
             return
         }
 
-        appLogStore.logSecurity(
-            actionType = if (isSuperAdmin) "Accès super administrateur" else "Accès paramètres",
-            details = if (isSuperAdmin) {
-                "Ouverture des paramètres avec le code super administrateur."
-            } else {
-                "Ouverture des paramètres avec le code PIN standard."
-            },
-        )
+        if (isEmergencyAccess) {
+            appLogStore.logCritical(
+                category = AppLogCategory.SECURITY,
+                actionType = "Accès super administrateur de secours",
+                entity = "Sécurité",
+                details = "Ouverture de l'accès de secours avec le code dynamique du jour.",
+            )
+        } else {
+            appLogStore.logInfo(
+                category = AppLogCategory.SECURITY,
+                actionType = if (isSuperAdmin) "Accès super administrateur" else "Accès paramètres",
+                entity = "Sécurité",
+                details = if (isSuperAdmin) {
+                    "Ouverture des paramètres avec le code super administrateur."
+                } else {
+                    "Ouverture des paramètres avec le code PIN standard."
+                },
+            )
+        }
         uiStateMutable.update {
             it.copy(
                 isUnlocked = true,
-                isSuperAdmin = isSuperAdmin,
+                isSuperAdmin = isSuperAdmin || isEmergencyAccess,
+                isEmergencyAccess = isEmergencyAccess,
                 pinInput = "",
                 message = null,
                 messageType = null,
             )
         }
+    }
+
+    fun exitEmergencyAccess() {
+        appLogStore.logCritical(
+            category = AppLogCategory.SECURITY,
+            actionType = "Sortie de l'accès de secours",
+            entity = "Sécurité",
+            details = "Fermeture volontaire de l'accès super administrateur de secours.",
+        )
+        uiStateMutable.update {
+            it.copy(
+                isUnlocked = false,
+                isSuperAdmin = false,
+                isEmergencyAccess = false,
+                pinInput = "",
+                superAdminCurrentPinInput = "",
+                superAdminNewPinInput = "",
+                superAdminConfirmPinInput = "",
+                message = null,
+                messageType = null,
+            )
+        }
+        requirePinOnNextSettingsEntry = true
     }
 
     fun changeNormalPin() {
@@ -502,8 +584,10 @@ class SettingsViewModel(
         }
 
         pinCodeStore.saveNormalPin(newPin)
-        appLogStore.logSecurity(
+        appLogStore.logCritical(
+            category = AppLogCategory.SECURITY,
             actionType = "Modification du PIN",
+            entity = "Sécurité",
             details = "Le code PIN standard des paramètres a été mis à jour.",
         )
         uiStateMutable.update {
@@ -523,16 +607,17 @@ class SettingsViewModel(
     }
 
     fun changeSuperAdminPin() {
-        val currentPin = uiState.value.superAdminCurrentPinInput.trim()
-        val newPin = uiState.value.superAdminNewPinInput.trim()
-        val confirmPin = uiState.value.superAdminConfirmPinInput.trim()
+        val state = uiState.value
+        val currentPin = state.superAdminCurrentPinInput.trim()
+        val newPin = state.superAdminNewPinInput.trim()
+        val confirmPin = state.superAdminConfirmPinInput.trim()
 
         when {
-            !uiState.value.isSuperAdmin -> {
+            !state.isSuperAdmin -> {
                 uiStateMutable.update { it.copy(message = "Cette option n'est pas disponible.", messageType = FeedbackDialogType.ERROR) }
                 return
             }
-            !pinCodeStore.verifySuperAdminPin(currentPin) -> {
+            !state.isEmergencyAccess && !pinCodeStore.verifySuperAdminPin(currentPin) -> {
                 uiStateMutable.update { it.copy(message = "Le code PIN actuel est incorrect.", messageType = FeedbackDialogType.ERROR) }
                 return
             }
@@ -547,16 +632,23 @@ class SettingsViewModel(
         }
 
         pinCodeStore.saveSuperAdminPin(newPin)
-        appLogStore.logSecurity(
+        appLogStore.logCritical(
+            category = AppLogCategory.SECURITY,
             actionType = "Modification du PIN super administrateur",
-            details = "Le code PIN super administrateur a été mis à jour.",
+            entity = "Sécurité",
+            details = if (state.isEmergencyAccess) {
+                "Le code super administrateur a été changé depuis l'écran de secours."
+            } else {
+                "Le code PIN super administrateur a été mis à jour."
+            },
         )
         uiStateMutable.update {
             it.copy(
                 superAdminCurrentPinInput = "",
                 superAdminNewPinInput = "",
                 superAdminConfirmPinInput = "",
-                message = "Le code PIN super administrateur a été modifié avec succès.",
+                isEmergencyAccess = false,
+                message = "Le code super admin a été modifié avec succès.",
                 messageType = FeedbackDialogType.SUCCESS,
             )
         }
@@ -573,8 +665,10 @@ class SettingsViewModel(
                     )
                 }
                 application.reloadAppContainer()
-                appLogStore.logSystem(
+                appLogStore.logCritical(
+                    category = AppLogCategory.SYSTEM,
                     actionType = "Restauration",
+                    entity = "Sauvegarde",
                     details = "Restauration complète de la base depuis un fichier ZIP.",
                 )
             },
@@ -744,8 +838,10 @@ class SettingsViewModel(
                         boatPhotos = application.appContainer.boatPhotoRepository.observePhotos().first(),
                     )
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Export complet",
+                    entity = "Sauvegarde",
                     details = "Export complet de la base de données.",
                 )
             },
@@ -765,8 +861,10 @@ class SettingsViewModel(
                         sessions = sessionsToExport,
                     )
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Export des sorties",
+                    entity = "Session",
                     details = "Export des sorties avec ${sessionsToExport.size} sortie(s).",
                 )
             },
@@ -794,8 +892,10 @@ class SettingsViewModel(
                         boatPhotos = boatPhotos,
                     )
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Export des bateaux",
+                    entity = "Bateau",
                     details = "Export de toutes les fiches bateaux.",
                 )
             },
@@ -810,8 +910,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     appLogStore.exportToUri(uri, filters)
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Export des logs",
+                    entity = "Logs",
                     details = "Export des logs applicatifs avec ${filters.categories.size} catégorie(s) et le filtre ${filters.preset.label}.",
                 )
             },
@@ -1026,8 +1128,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     executeDataCleanup(preview.cutoffDate)
                 }
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Nettoyage des données",
+                    entity = "Données",
                     details = "Nettoyage avant ${preview.cutoffDate}: ${preview.sessionsCount} sortie(s), ${preview.remarksCount} remarque(s).",
                 )
             },
@@ -1070,8 +1174,10 @@ class SettingsViewModel(
                 }
             },
             onSuccessResult = { importedCount ->
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Import de rameurs",
+                    entity = "Rameur",
                     details = if (importedCount == 0) {
                         "Aucun nouveau rameur importé."
                     } else {
@@ -1119,8 +1225,10 @@ class SettingsViewModel(
                 }
             },
             onSuccessResult = { importedCount ->
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Import de bateaux",
+                    entity = "Bateau",
                     details = if (importedCount == 0) {
                         "Aucun nouveau bateau importé."
                     } else {
@@ -1174,8 +1282,33 @@ class SettingsViewModel(
             errorPopupDurationMillis = appPreferencesStore.currentPreferences().errorPopupDurationMillis,
             animationsEnabled = uiState.value.animationsEnabled,
             crewsEnabled = uiState.value.crewsEnabled,
+            automaticRowerCleanupEnabled = uiState.value.rowerManagement.automaticCleanupEnabled,
+            rowerInactivityCleanupMonths = uiState.value.rowerManagement.cleanupMonthsInput.toIntOrNull()?.coerceAtLeast(1)
+                ?: appPreferencesStore.currentPreferences().rowerInactivityCleanupMonths,
         )
         loadAppPreferencesIntoState(message = "Le comportement de l'application a été enregistré.")
+    }
+
+    fun saveRowerCleanupSettings() {
+        if (!uiState.value.isSuperAdmin) {
+            uiStateMutable.update { it.copy(message = "Cette option n'est pas disponible.", messageType = FeedbackDialogType.ERROR) }
+            return
+        }
+        val months = uiState.value.rowerManagement.cleanupMonthsInput.toIntOrNull()
+        if (months == null || months <= 0) {
+            uiStateMutable.update {
+                it.copy(
+                    message = "Veuillez saisir une durée d'inactivité valide en mois.",
+                    messageType = FeedbackDialogType.ERROR,
+                )
+            }
+            return
+        }
+        appPreferencesStore.saveRowerCleanupSettings(
+            automaticCleanupEnabled = uiState.value.rowerManagement.automaticCleanupEnabled,
+            inactivityMonths = months,
+        )
+        loadAppPreferencesIntoState(message = "Le nettoyage automatique des rameurs a été enregistré.")
     }
 
     fun saveThemeColors() {
@@ -1413,10 +1546,12 @@ class SettingsViewModel(
             return
         }
 
+        val existingRower = state.rowerManagement.rowers.firstOrNull { it.id == editingId }
         val entity = RowerEntity(
             id = editingId ?: 0,
             firstName = firstName,
             lastName = lastName,
+            isDeleted = existingRower?.isDeleted ?: false,
         )
 
         launchWork(
@@ -1429,9 +1564,15 @@ class SettingsViewModel(
                         rowerRepository.updateRower(entity)
                     }
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = if (editingId == null) "Création de rameur" else "Modification de rameur",
-                    details = "Rameur enregistré: ${listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}.",
+                    entity = "Rameur",
+                    details = if (editingId == null || existingRower == null) {
+                        "Rameur enregistré : ${listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}."
+                    } else {
+                        "Ancien : ${listOf(existingRower.firstName, existingRower.lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }} | Nouveau : ${listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}."
+                    },
                 )
             },
             onSuccess = {
@@ -1448,15 +1589,23 @@ class SettingsViewModel(
     }
 
     fun deleteRower(rower: RowerEntity) {
+        if (rower.isDeleted) {
+            uiStateMutable.update {
+                it.copy(message = "Ce rameur est déjà supprimé.", messageType = FeedbackDialogType.ERROR)
+            }
+            return
+        }
         launchWork(
             onErrorMessage = "Impossible de supprimer le rameur.",
             block = {
                 withContext(Dispatchers.IO) {
                     rowerRepository.deleteRower(rower)
                 }
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Suppression de rameur",
-                    details = "Rameur supprimé: ${listOf(rower.firstName, rower.lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}.",
+                    entity = "Rameur",
+                    details = "Rameur supprimé : ${listOf(rower.firstName, rower.lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Sans nom" }}.",
                 )
             },
             onSuccess = { state ->
@@ -1471,6 +1620,145 @@ class SettingsViewModel(
                     } else {
                         state.rowerManagement
                     },
+                )
+            },
+        )
+    }
+
+    fun toggleRowerBulkSelectionMode() {
+        uiStateMutable.update {
+            it.copy(
+                rowerManagement = it.rowerManagement.copy(
+                    isBulkSelectionMode = !it.rowerManagement.isBulkSelectionMode,
+                    selectedRowerIds = emptySet(),
+                ),
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun onRowerSelected(rowerId: Long, selected: Boolean) {
+        uiStateMutable.update {
+            it.copy(
+                rowerManagement = it.rowerManagement.copy(
+                    selectedRowerIds = if (selected) {
+                        it.rowerManagement.selectedRowerIds + rowerId
+                    } else {
+                        it.rowerManagement.selectedRowerIds - rowerId
+                    },
+                ),
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun deleteSelectedRowers() {
+        val selectedRowers = uiState.value.rowerManagement.selectedRowers
+        if (selectedRowers.isEmpty()) {
+            uiStateMutable.update {
+                it.copy(message = "Sélectionnez au moins un rameur.", messageType = FeedbackDialogType.ERROR)
+            }
+            return
+        }
+        softDeleteRowers(
+            rowers = selectedRowers,
+            actionType = "Suppression groupée de rameurs",
+            successMessage = "${selectedRowers.size} rameur(s) supprimé(s).",
+            resetBulkSelection = true,
+        )
+    }
+
+    fun previewInactiveRowersCleanup() {
+        val months = uiState.value.rowerManagement.cleanupMonthsInput.toIntOrNull()
+        if (months == null || months <= 0) {
+            uiStateMutable.update {
+                it.copy(message = "Veuillez saisir une durée d'inactivité valide en mois.", messageType = FeedbackDialogType.ERROR)
+            }
+            return
+        }
+        val cutoffDate = inactiveRowerCutoffDate(months)
+        launchWork(
+            onErrorMessage = "Impossible de préparer la liste des rameurs inactifs.",
+            block = {
+                val inactiveRowers = withContext(Dispatchers.IO) {
+                    rowerRepository.getInactiveRowers(cutoffDate)
+                }
+                uiStateMutable.update {
+                    it.copy(
+                        rowerManagement = it.rowerManagement.copy(
+                            cleanupPreview = RowerCleanupPreview(cutoffDate, inactiveRowers),
+                        ),
+                    )
+                }
+            },
+            onSuccessMessage = null,
+        )
+    }
+
+    fun dismissInactiveRowersCleanup() {
+        uiStateMutable.update {
+            it.copy(
+                rowerManagement = it.rowerManagement.copy(cleanupPreview = null),
+                message = null,
+                messageType = null,
+            )
+        }
+    }
+
+    fun deleteInactiveRowersFromPreview() {
+        val preview = uiState.value.rowerManagement.cleanupPreview ?: return
+        if (preview.rowers.isEmpty()) {
+            dismissInactiveRowersCleanup()
+            return
+        }
+        softDeleteRowers(
+            rowers = preview.rowers,
+            actionType = "Nettoyage des rameurs inactifs",
+            successMessage = "${preview.rowers.size} rameur(s) inactif(s) supprimé(s).",
+            resetCleanupPreview = true,
+        )
+    }
+
+    private fun softDeleteRowers(
+        rowers: List<RowerEntity>,
+        actionType: String,
+        successMessage: String,
+        resetBulkSelection: Boolean = false,
+        resetCleanupPreview: Boolean = false,
+    ) {
+        val activeRowers = rowers.filterNot { it.isDeleted }
+        if (activeRowers.isEmpty()) {
+            uiStateMutable.update {
+                it.copy(message = "Aucun rameur actif à supprimer.", messageType = FeedbackDialogType.ERROR)
+            }
+            return
+        }
+        launchWork(
+            onErrorMessage = "Impossible de supprimer les rameurs.",
+            block = {
+                val deletedCount = withContext(Dispatchers.IO) {
+                    rowerRepository.deleteRowers(activeRowers)
+                }
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
+                    actionType = actionType,
+                    entity = "Rameur",
+                    details = "Nombre : $deletedCount. Rameurs : ${activeRowers.formatRowerNamesForLog()}.",
+                )
+            },
+            onSuccess = { state ->
+                state.copy(
+                    message = successMessage,
+                    rowerManagement = state.rowerManagement.copy(
+                        isBulkSelectionMode = if (resetBulkSelection) false else state.rowerManagement.isBulkSelectionMode,
+                        selectedRowerIds = if (resetBulkSelection) emptySet() else state.rowerManagement.selectedRowerIds - activeRowers.map { it.id }.toSet(),
+                        cleanupPreview = if (resetCleanupPreview) null else state.rowerManagement.cleanupPreview,
+                        editingRowerId = state.rowerManagement.editingRowerId?.takeUnless { editingId ->
+                            activeRowers.any { it.id == editingId }
+                        },
+                    ),
                 )
             },
         )
@@ -1575,6 +1863,7 @@ class SettingsViewModel(
             name = boatName,
             seatCount = seatCount,
         )
+        val existingBoat = state.boatManagement.boats.firstOrNull { it.id == editingId }
 
         launchWork(
             onErrorMessage = "Impossible d'enregistrer le bateau.",
@@ -1586,9 +1875,15 @@ class SettingsViewModel(
                         boatRepository.updateBoat(entity)
                     }
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = if (editingId == null) "Création de bateau" else "Modification de bateau",
-                    details = "Bateau enregistré: $boatName ($seatCount place(s)).",
+                    entity = "Bateau",
+                    details = if (editingId == null || existingBoat == null) {
+                        "Bateau enregistré : $boatName | Places : $seatCount."
+                    } else {
+                        "Nom : ${existingBoat.name} -> $boatName | Places : ${existingBoat.seatCount} -> $seatCount."
+                    },
                 )
             },
             onSuccess = {
@@ -1611,9 +1906,11 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     boatRepository.deleteBoat(boat)
                 }
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Suppression de bateau",
-                    details = "Bateau supprimé: ${boat.name}.",
+                    entity = "Bateau",
+                    details = "Bateau supprimé : ${boat.name}.",
                 )
             },
             onSuccess = { state ->
@@ -1712,8 +2009,10 @@ class SettingsViewModel(
                         destinationRepository.updateDestination(entity)
                     }
                 }
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = if (editingId == null) "Création de destination" else "Modification de destination",
+                    entity = "Destination",
                     details = "Destination enregistrée: $destinationName.",
                 )
             },
@@ -1736,8 +2035,10 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     destinationRepository.deleteDestination(destination)
                 }
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Suppression de destination",
+                    entity = "Destination",
                     details = "Destination supprimée: ${destination.name}.",
                 )
             },
@@ -1935,6 +2236,22 @@ class SettingsViewModel(
         return "${firstName.trim().lowercase()}|${lastName.trim().lowercase()}"
     }
 
+    private fun inactiveRowerCutoffDate(months: Int): String {
+        val calendar = Calendar.getInstance().apply {
+            add(Calendar.MONTH, -months.coerceAtLeast(1))
+        }
+        return cleanupDateFormatter.format(calendar.time)
+    }
+
+    private fun List<RowerEntity>.formatRowerNamesForLog(): String {
+        return joinToString(", ") { rower ->
+            listOf(rower.firstName, rower.lastName)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+                .ifBlank { "Sans nom" }
+        }.ifBlank { "Aucun" }
+    }
+
     private fun normalizeHex(value: String): String {
         return "#${value.trim().removePrefix("#").uppercase()}"
     }
@@ -1956,6 +2273,10 @@ class SettingsViewModel(
                 errorPopupDurationSecondsInput = formatSeconds(preferences.errorPopupDurationMillis),
                 animationsEnabled = preferences.animationsEnabled,
                 crewsEnabled = preferences.crewsEnabled,
+                rowerManagement = it.rowerManagement.copy(
+                    automaticCleanupEnabled = preferences.automaticRowerCleanupEnabled,
+                    cleanupMonthsInput = preferences.rowerInactivityCleanupMonths.toString(),
+                ),
                 message = message ?: it.message,
                 messageType = if (message == null) it.messageType else FeedbackDialogType.SUCCESS,
             )

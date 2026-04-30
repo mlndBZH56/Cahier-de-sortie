@@ -3,6 +3,7 @@ package com.aca56.cahiersortiecodex.feature.ongoingsessions.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
 import com.aca56.cahiersortiecodex.data.logging.AppLogStore
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.SessionStatus
@@ -285,9 +286,11 @@ class OngoingSessionsViewModel(
 
                 sessionRepository.updateSession(updatedSession)
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Clôture de session",
-                    details = "Session ${openedSession.boatName} terminée avec succès.",
+                    entity = "Session",
+                    details = "Sortie clôturée : bateau ${openedSession.boatName}, identifiant ${openedSessionId}.",
                 )
                 uiStateMutable.update {
                     it.copy(
@@ -374,9 +377,11 @@ class OngoingSessionsViewModel(
                     sessionRepository.updateSession(updatedSession)
                 }
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Clôture multiple de sessions",
-                    details = "${selectedSessions.size} session(s) terminée(s) en lot.",
+                    entity = "Session",
+                    details = "${selectedSessions.size} sortie(s) ont été clôturées en lot.",
                 )
                 uiStateMutable.update {
                     it.copy(
@@ -424,9 +429,11 @@ class OngoingSessionsViewModel(
                     ?: error("Session introuvable.")
                 sessionRepository.deleteSession(sessionWithDetails.session)
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Suppression de session",
-                    details = "Session $openedSessionId supprimée depuis les sorties en cours.",
+                    entity = "Session",
+                    details = "Sortie supprimée depuis les sorties en cours : identifiant $openedSessionId.",
                 )
                 closeSessionDetails()
                 uiStateMutable.update {

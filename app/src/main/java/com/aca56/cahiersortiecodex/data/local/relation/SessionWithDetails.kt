@@ -18,7 +18,10 @@ data class SessionRowerWithRower(
     val rower: RowerEntity?,
 ) {
     val displayName: String
-        get() = sessionRower.guestName ?: rower?.let { "${it.firstName} ${it.lastName}" } ?: "Rameur inconnu"
+        get() = sessionRower.guestName ?: rower?.let {
+            val name = "${it.firstName} ${it.lastName}".trim().ifBlank { "Sans nom" }
+            if (it.isDeleted) "$name (supprimé)" else name
+        } ?: "Rameur inconnu"
 }
 
 data class SessionWithDetails(

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -159,8 +160,10 @@ class CrewsViewModel(
             name = state.crewNameInput,
             rowerIds = state.selectedRowerIds.toList(),
         )
-        appLogStore.logAction(
+        appLogStore.logInfo(
+            category = AppLogCategory.ACTIONS,
             actionType = if (state.editingCrewId == null) "Création d'équipage" else "Modification d'équipage",
+            entity = "Équipage",
             details = "Équipage enregistré: ${state.crewNameInput} (${state.selectedRowerIds.size} rameur(s)).",
         )
         uiStateMutable.update {
@@ -177,8 +180,10 @@ class CrewsViewModel(
 
     fun deleteCrew(crewId: Long) {
         crewStore.deleteCrew(crewId)
-        appLogStore.logAction(
+        appLogStore.logWarning(
+            category = AppLogCategory.ACTIONS,
             actionType = "Suppression d'équipage",
+            entity = "Équipage",
             details = "Équipage supprimé: $crewId.",
         )
         uiStateMutable.update {

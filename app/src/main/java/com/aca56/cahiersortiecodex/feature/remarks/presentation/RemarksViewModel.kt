@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aca56.cahiersortiecodex.data.logging.AppLogCategory
 import com.aca56.cahiersortiecodex.data.logging.AppLogStore
+import com.aca56.cahiersortiecodex.data.logging.LogLevel
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.decodeRemarkPhotoPaths
 import com.aca56.cahiersortiecodex.data.local.entity.encodeRemarkPhotoPaths
@@ -318,8 +320,10 @@ class RemarksViewModel(
                     boatPhotoStorage.importCompressedPhoto(uri)
                 }
             }.onSuccess { filePath ->
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Ajout de photo",
+                    entity = "Remarque",
                     details = "Ajout d'une photo depuis la galerie.",
                 )
                 uiStateMutable.update {
@@ -359,8 +363,10 @@ class RemarksViewModel(
                     boatPhotoStorage.saveCompressedBitmap(bitmap)
                 }
             }.onSuccess { filePath ->
-                appLogStore.logAction(
+                appLogStore.logInfo(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Ajout de photo",
+                    entity = "Remarque",
                     details = "Ajout d'une photo prise avec l'appareil.",
                 )
                 uiStateMutable.update {
@@ -402,8 +408,10 @@ class RemarksViewModel(
         }
         filePath?.let(boatPhotoStorage::deletePhoto)
         if (filePath != null) {
-            appLogStore.logAction(
+            appLogStore.logWarning(
+                category = AppLogCategory.ACTIONS,
                 actionType = "Suppression de photo",
+                entity = "Remarque",
                 details = "Suppression d'une photo liée à une remarque ou à un suivi.",
             )
         }
@@ -457,8 +465,10 @@ class RemarksViewModel(
                     ),
                 )
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Suppression de suivi",
+                    entity = "Réparation",
                     details = "Suppression d'un suivi de réparation.",
                 )
                 uiStateMutable.update {
@@ -474,6 +484,7 @@ class RemarksViewModel(
             }.onFailure {
                 appLogStore.logError(
                     actionType = "Échec de suppression de suivi",
+                    entity = "Réparation",
                     details = "Le suivi de réparation n'a pas pu être supprimé.",
                 )
                 uiStateMutable.update {
@@ -553,8 +564,11 @@ class RemarksViewModel(
                     }
                 }
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.log(
+                    category = AppLogCategory.ACTIONS,
+                    level = if (state.editorStatus == RemarkStatus.NORMAL) LogLevel.INFO else LogLevel.WARNING,
                     actionType = if (editingRemark == null) "Ajout de remarque" else "Modification de remarque",
+                    entity = if (state.editorStatus == RemarkStatus.NORMAL) "Remarque" else "Bateau",
                     details = buildString {
                         append("Remarque ")
                         append(if (editingRemark == null) "ajoutée" else "mise à jour")
@@ -634,8 +648,10 @@ class RemarksViewModel(
                     }
                 }
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.logWarning(
+                    category = AppLogCategory.ACTIONS,
                     actionType = "Suppression de remarque",
+                    entity = "Remarque",
                     details = "Suppression d'une remarque (${remark.status.logLabel()}).",
                 )
                 uiStateMutable.update {
@@ -725,7 +741,9 @@ class RemarksViewModel(
                     )
                 }
             }.onSuccess {
-                appLogStore.logAction(
+                appLogStore.log(
+                    category = AppLogCategory.ACTIONS,
+                    level = LogLevel.INFO,
                     actionType = if (state.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) {
                         "Réparation terminée"
                     } else if (state.editingRepairUpdateId == null) {
@@ -733,6 +751,7 @@ class RemarksViewModel(
                     } else {
                         "Modification de suivi"
                     },
+                    entity = if (state.repairUpdateMode == RepairUpdateMode.CLOSE_REPAIR) "Bateau" else "Réparation",
                     details = "Mise à jour de l'historique de réparation pour la remarque ${activeRemark.id}.",
                 )
                 uiStateMutable.update {

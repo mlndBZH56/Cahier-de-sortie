@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -169,6 +170,7 @@ fun SettingsRoute(
         onSaveFirstPin = viewModel::saveFirstPin,
         onChangeNormalPin = viewModel::changeNormalPin,
         onChangeSuperAdminPin = viewModel::changeSuperAdminPin,
+        onExitEmergencyAccess = viewModel::exitEmergencyAccess,
         onSaveAppSettings = viewModel::saveAppSettings,
         onSaveNotificationSettings = viewModel::saveNotificationSettings,
         onSaveThemeColors = viewModel::saveThemeColors,
@@ -277,6 +279,7 @@ fun SettingsScreen(
     onSaveFirstPin: () -> Unit,
     onChangeNormalPin: () -> Unit,
     onChangeSuperAdminPin: () -> Unit,
+    onExitEmergencyAccess: () -> Unit,
     onSaveAppSettings: () -> Unit,
     onSaveNotificationSettings: () -> Unit,
     onSaveThemeColors: () -> Unit,
@@ -343,6 +346,38 @@ fun SettingsScreen(
             uiState = uiState,
             onPinInputChanged = onPinInputChanged,
             onUnlockSettings = onUnlockSettings,
+        )
+        uiState.isEmergencyAccess -> EmergencyAccessScreen(
+            contentPadding = contentPadding,
+            uiState = uiState,
+            onThemeModeChanged = onThemeModeChanged,
+            onInactivityTimeoutMinutesChanged = onInactivityTimeoutMinutesChanged,
+            onSuccessPopupDurationSecondsChanged = onSuccessPopupDurationSecondsChanged,
+            onErrorPopupDurationSecondsChanged = onErrorPopupDurationSecondsChanged,
+            onAnimationsEnabledChanged = onAnimationsEnabledChanged,
+            onCrewsEnabledChanged = onCrewsEnabledChanged,
+            onPrimaryColorChanged = onPrimaryColorChanged,
+            onSecondaryColorChanged = onSecondaryColorChanged,
+            onTertiaryColorChanged = onTertiaryColorChanged,
+            onSuperAdminNewPinChanged = onSuperAdminNewPinChanged,
+            onSuperAdminConfirmPinChanged = onSuperAdminConfirmPinChanged,
+            onChangeSuperAdminPin = onChangeSuperAdminPin,
+            onSaveAppSettings = onSaveAppSettings,
+            onSaveNotificationSettings = onSaveNotificationSettings,
+            onSaveThemeColors = onSaveThemeColors,
+            onExportFullDatabase = onExportFullDatabase,
+            onRestoreBackup = onRestoreBackup,
+            onResetAllAppData = onResetAllAppData,
+            onExportLogs = onExportLogs,
+            onOpenCrews = onOpenCrews,
+            onCleanupSessionsEnabledChanged = onCleanupSessionsEnabledChanged,
+            onCleanupRemarksEnabledChanged = onCleanupRemarksEnabledChanged,
+            onCleanupPeriodChanged = onCleanupPeriodChanged,
+            onCleanupCustomCutoffDateChanged = onCleanupCustomCutoffDateChanged,
+            onPreviewDataCleanup = onPreviewDataCleanup,
+            onDismissCleanupPreview = onDismissCleanupPreview,
+            onPerformDataCleanup = onPerformDataCleanup,
+            onExitEmergencyAccess = onExitEmergencyAccess,
         )
         else -> SettingsContent(
             contentPadding = contentPadding,
@@ -516,6 +551,375 @@ private fun UnlockSettingsScreen(
         ) {
             Text("Déverrouiller")
         }
+    }
+}
+
+@Composable
+private fun EmergencyAccessScreen(
+    contentPadding: PaddingValues,
+    uiState: SettingsUiState,
+    onThemeModeChanged: (ThemeMode) -> Unit,
+    onInactivityTimeoutMinutesChanged: (String) -> Unit,
+    onSuccessPopupDurationSecondsChanged: (String) -> Unit,
+    onErrorPopupDurationSecondsChanged: (String) -> Unit,
+    onAnimationsEnabledChanged: (Boolean) -> Unit,
+    onCrewsEnabledChanged: (Boolean) -> Unit,
+    onPrimaryColorChanged: (String) -> Unit,
+    onSecondaryColorChanged: (String) -> Unit,
+    onTertiaryColorChanged: (String) -> Unit,
+    onSuperAdminNewPinChanged: (String) -> Unit,
+    onSuperAdminConfirmPinChanged: (String) -> Unit,
+    onChangeSuperAdminPin: () -> Unit,
+    onSaveAppSettings: () -> Unit,
+    onSaveNotificationSettings: () -> Unit,
+    onSaveThemeColors: () -> Unit,
+    onExportFullDatabase: () -> Unit,
+    onRestoreBackup: () -> Unit,
+    onResetAllAppData: (String) -> Boolean,
+    onExportLogs: (AppLogExportFilters) -> Unit,
+    onOpenCrews: () -> Unit,
+    onCleanupSessionsEnabledChanged: (Boolean) -> Unit,
+    onCleanupRemarksEnabledChanged: (Boolean) -> Unit,
+    onCleanupPeriodChanged: (DataCleanupPeriod) -> Unit,
+    onCleanupCustomCutoffDateChanged: (String) -> Unit,
+    onPreviewDataCleanup: () -> Unit,
+    onDismissCleanupPreview: () -> Unit,
+    onPerformDataCleanup: (String) -> Boolean,
+    onExitEmergencyAccess: () -> Unit,
+) {
+    var showResetDialog by remember { mutableStateOf(false) }
+    var showResetPinDialog by remember { mutableStateOf(false) }
+    var resetPinInput by remember { mutableStateOf("") }
+    var cleanupPinInput by remember { mutableStateOf("") }
+    var showLogsExportDialog by remember { mutableStateOf(false) }
+    var selectedLogCategories by remember { mutableStateOf(AppLogCategory.values().toSet()) }
+    var selectedLogDatePreset by remember { mutableStateOf(AppLogDatePreset.LAST_7_DAYS) }
+    var logCustomDateFrom by remember { mutableStateOf("") }
+    var logCustomDateTo by remember { mutableStateOf("") }
+    var showLogDateFromPicker by remember { mutableStateOf(false) }
+    var showLogDateToPicker by remember { mutableStateOf(false) }
+
+    if (showResetDialog) {
+        AppModalDialog(
+            title = "Réinitialiser les données",
+            onDismiss = { showResetDialog = false },
+            accentColor = MaterialTheme.colorScheme.error,
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Continuer",
+                    onConfirm = {
+                        showResetDialog = false
+                        resetPinInput = ""
+                        showResetPinDialog = true
+                    },
+                    onDismiss = { showResetDialog = false },
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                )
+            },
+        ) {
+            Text("Voulez-vous vraiment réinitialiser toutes les données de l'application ?")
+        }
+    }
+
+    if (showResetPinDialog) {
+        AppModalDialog(
+            title = "Confirmation finale",
+            onDismiss = {
+                showResetPinDialog = false
+                resetPinInput = ""
+            },
+            accentColor = MaterialTheme.colorScheme.error,
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Réinitialiser",
+                    onConfirm = {
+                        if (onResetAllAppData(resetPinInput)) {
+                            showResetPinDialog = false
+                            resetPinInput = ""
+                        }
+                    },
+                    onDismiss = {
+                        showResetPinDialog = false
+                        resetPinInput = ""
+                    },
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                    confirmEnabled = !uiState.isWorking,
+                )
+            },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Saisissez le code PIN super administrateur pour confirmer définitivement la réinitialisation.")
+                AppTextField(
+                    value = resetPinInput,
+                    onValueChange = { resetPinInput = it.filter(Char::isDigit) },
+                    label = "Code PIN super administrateur",
+                    modifier = Modifier.fillMaxWidth(),
+                    type = AppTextFieldType.PIN,
+                )
+            }
+        }
+    }
+
+    uiState.cleanupPreview?.let { preview ->
+        AppModalDialog(
+            title = "Confirmer le nettoyage",
+            onDismiss = {
+                cleanupPinInput = ""
+                onDismissCleanupPreview()
+            },
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Supprimer",
+                    onConfirm = {
+                        if (onPerformDataCleanup(cleanupPinInput)) {
+                            cleanupPinInput = ""
+                        }
+                    },
+                    onDismiss = {
+                        cleanupPinInput = ""
+                        onDismissCleanupPreview()
+                    },
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                    confirmEnabled = !uiState.isWorking,
+                )
+            },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Éléments à supprimer avant le ${formatDateForDisplay(preview.cutoffDate)} : ${preview.sessionsCount} sortie(s), ${preview.remarksCount} remarque(s).",
+                )
+                AppTextField(
+                    value = cleanupPinInput,
+                    onValueChange = { cleanupPinInput = it.filter(Char::isDigit) },
+                    label = "Code PIN super administrateur",
+                    modifier = Modifier.fillMaxWidth(),
+                    type = AppTextFieldType.PIN,
+                )
+            }
+        }
+    }
+
+    if (showLogsExportDialog) {
+        EmergencyLogsExportDialog(
+            uiState = uiState,
+            selectedLogCategories = selectedLogCategories,
+            onSelectedLogCategoriesChanged = { selectedLogCategories = it },
+            selectedLogDatePreset = selectedLogDatePreset,
+            onSelectedLogDatePresetChanged = { selectedLogDatePreset = it },
+            logCustomDateFrom = logCustomDateFrom,
+            onLogCustomDateFromChanged = { logCustomDateFrom = it },
+            logCustomDateTo = logCustomDateTo,
+            onLogCustomDateToChanged = { logCustomDateTo = it },
+            showLogDateFromPicker = showLogDateFromPicker,
+            onShowLogDateFromPickerChanged = { showLogDateFromPicker = it },
+            showLogDateToPicker = showLogDateToPicker,
+            onShowLogDateToPickerChanged = { showLogDateToPicker = it },
+            onDismiss = { showLogsExportDialog = false },
+            onExport = {
+                showLogsExportDialog = false
+                onExportLogs(
+                    AppLogExportFilters(
+                        categories = selectedLogCategories,
+                        preset = selectedLogDatePreset,
+                        customFromDate = logCustomDateFrom,
+                        customToDate = logCustomDateTo,
+                    ),
+                )
+            },
+        )
+    }
+
+    SettingsGateScreen(
+        contentPadding = contentPadding,
+        title = "Accès via code de secours",
+        description = "Vous êtes dans l'accès d'urgence super administrateur. Les réglages critiques restent disponibles.",
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            BackupSection(
+                uiState = uiState,
+                onExportFullDatabase = onExportFullDatabase,
+                onRestoreBackup = onRestoreBackup,
+            )
+            AppBehaviorSection(
+                uiState = uiState,
+                onThemeModeChanged = onThemeModeChanged,
+                onInactivityTimeoutMinutesChanged = onInactivityTimeoutMinutesChanged,
+                onAnimationsEnabledChanged = onAnimationsEnabledChanged,
+                onCrewsEnabledChanged = onCrewsEnabledChanged,
+                onOpenCrews = onOpenCrews,
+                onSaveAppSettings = onSaveAppSettings,
+            )
+            NotificationSettingsSection(
+                uiState = uiState,
+                onSuccessPopupDurationSecondsChanged = onSuccessPopupDurationSecondsChanged,
+                onErrorPopupDurationSecondsChanged = onErrorPopupDurationSecondsChanged,
+                onSaveNotificationSettings = onSaveNotificationSettings,
+            )
+            ThemeColorsSection(
+                uiState = uiState,
+                onPrimaryColorChanged = onPrimaryColorChanged,
+                onSecondaryColorChanged = onSecondaryColorChanged,
+                onTertiaryColorChanged = onTertiaryColorChanged,
+                onSaveThemeColors = onSaveThemeColors,
+            )
+            SystemToolsSection(
+                uiState = uiState,
+                onResetAllAppData = { showResetDialog = true },
+                onExportLogs = { _ -> showLogsExportDialog = true },
+            )
+            DataCleanupSection(
+                uiState = uiState,
+                onCleanupSessionsEnabledChanged = onCleanupSessionsEnabledChanged,
+                onCleanupRemarksEnabledChanged = onCleanupRemarksEnabledChanged,
+                onCleanupPeriodChanged = onCleanupPeriodChanged,
+                onCleanupCustomCutoffDateChanged = onCleanupCustomCutoffDateChanged,
+                onPreviewDataCleanup = onPreviewDataCleanup,
+            )
+            AdvancedAccessSection(
+                uiState = uiState,
+                onSuperAdminCurrentPinChanged = {},
+                onSuperAdminNewPinChanged = onSuperAdminNewPinChanged,
+                onSuperAdminConfirmPinChanged = onSuperAdminConfirmPinChanged,
+                onChangeSuperAdminPin = onChangeSuperAdminPin,
+                showCurrentPinField = false,
+                title = "Changer le code super admin",
+                description = "Définissez un nouveau code super admin sans saisir l'ancien code.",
+                confirmButtonLabel = "Changer le code super admin",
+            )
+            OutlinedButton(
+                onClick = onExitEmergencyAccess,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Quitter l'accès de secours")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmergencyLogsExportDialog(
+    uiState: SettingsUiState,
+    selectedLogCategories: Set<AppLogCategory>,
+    onSelectedLogCategoriesChanged: (Set<AppLogCategory>) -> Unit,
+    selectedLogDatePreset: AppLogDatePreset,
+    onSelectedLogDatePresetChanged: (AppLogDatePreset) -> Unit,
+    logCustomDateFrom: String,
+    onLogCustomDateFromChanged: (String) -> Unit,
+    logCustomDateTo: String,
+    onLogCustomDateToChanged: (String) -> Unit,
+    showLogDateFromPicker: Boolean,
+    onShowLogDateFromPickerChanged: (Boolean) -> Unit,
+    showLogDateToPicker: Boolean,
+    onShowLogDateToPickerChanged: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onExport: () -> Unit,
+) {
+    AppModalDialog(
+        title = "Exporter les logs",
+        onDismiss = onDismiss,
+        buttons = {
+            OutlinedButton(
+                onClick = {
+                    onSelectedLogCategoriesChanged(AppLogCategory.values().toSet())
+                    onSelectedLogDatePresetChanged(AppLogDatePreset.LAST_7_DAYS)
+                    onLogCustomDateFromChanged("")
+                    onLogCustomDateToChanged("")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Réinitialiser les filtres")
+            }
+            AppDialogActionRow(
+                confirmLabel = "Exporter",
+                onConfirm = onExport,
+                dismissLabel = "Fermer",
+                onDismiss = onDismiss,
+                confirmEnabled = !uiState.isWorking && selectedLogCategories.isNotEmpty(),
+            )
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "Choisissez une ou plusieurs catégories, puis une période d'export.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Catégories",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            AppLogCategory.values().forEach { category ->
+                CleanupToggleButton(
+                    label = category.label,
+                    selected = category in selectedLogCategories,
+                    onClick = {
+                        onSelectedLogCategoriesChanged(
+                            if (category in selectedLogCategories) {
+                                selectedLogCategories - category
+                            } else {
+                                selectedLogCategories + category
+                            },
+                        )
+                    },
+                )
+            }
+            Text(
+                "Période",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            AppLogDatePreset.values().forEach { preset ->
+                CleanupToggleButton(
+                    label = preset.label,
+                    selected = selectedLogDatePreset == preset,
+                    onClick = { onSelectedLogDatePresetChanged(preset) },
+                )
+            }
+            if (selectedLogDatePreset == AppLogDatePreset.CUSTOM) {
+                AppSelectorFieldButton(
+                    onClick = { onShowLogDateFromPickerChanged(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Date de début : ${logCustomDateFrom.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Choisir"}")
+                }
+                AppSelectorFieldButton(
+                    onClick = { onShowLogDateToPickerChanged(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Date de fin : ${logCustomDateTo.takeIf { it.isNotBlank() }?.let(::formatDateForDisplay) ?: "Choisir"}")
+                }
+            }
+        }
+    }
+
+    if (showLogDateFromPicker) {
+        AppDatePickerDialog(
+            storageDate = logCustomDateFrom.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { onShowLogDateFromPickerChanged(false) },
+            onDateSelected = { selectedDate ->
+                onLogCustomDateFromChanged(selectedDate)
+                onShowLogDateFromPickerChanged(false)
+            },
+        )
+    }
+
+    if (showLogDateToPicker) {
+        AppDatePickerDialog(
+            storageDate = logCustomDateTo.ifBlank { defaultCleanupCutoffDate() },
+            onDismissRequest = { onShowLogDateToPickerChanged(false) },
+            onDateSelected = { selectedDate ->
+                onLogCustomDateToChanged(selectedDate)
+                onShowLogDateToPickerChanged(false)
+            },
+        )
     }
 }
 
@@ -1274,11 +1678,93 @@ private fun RowerManagementSection(
     onEdit: (RowerEntity) -> Unit,
     onCancelEditing: () -> Unit,
     onDelete: (RowerEntity) -> Unit,
+    onToggleBulkSelectionMode: () -> Unit = {},
+    onRowerSelected: (Long, Boolean) -> Unit = { _, _ -> },
+    onDeleteSelectedRowers: () -> Unit = {},
+    onAutomaticCleanupEnabledChanged: (Boolean) -> Unit = {},
+    onCleanupMonthsChanged: (String) -> Unit = {},
+    onSaveCleanupSettings: () -> Unit = {},
+    onPreviewInactiveCleanup: () -> Unit = {},
+    onDismissInactiveCleanup: () -> Unit = {},
+    onDeleteInactiveRowers: () -> Unit = {},
     onImportRowers: () -> Unit,
 ) {
     val trackedOnFirstNameChanged = rememberInteractionAwareValueChange(onFirstNameChanged)
     val trackedOnLastNameChanged = rememberInteractionAwareValueChange(onLastNameChanged)
+    val trackedOnCleanupMonthsChanged = rememberInteractionAwareValueChange(onCleanupMonthsChanged)
     var showHelpDialog by remember { mutableStateOf(false) }
+    var showBulkDeleteDialog by remember { mutableStateOf(false) }
+    var showInactiveDeleteDialog by remember { mutableStateOf(false) }
+    val selectedRowers = uiState.rowerManagement.selectedRowers
+    val cleanupPreview = uiState.rowerManagement.cleanupPreview
+
+    if (showBulkDeleteDialog) {
+        AppModalDialog(
+            title = "Supprimer ${selectedRowers.size} rameurs ?",
+            onDismiss = { showBulkDeleteDialog = false },
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Supprimer",
+                    onConfirm = {
+                        showBulkDeleteDialog = false
+                        onDeleteSelectedRowers()
+                    },
+                    onDismiss = { showBulkDeleteDialog = false },
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                    confirmEnabled = selectedRowers.isNotEmpty() && !uiState.isWorking,
+                )
+            },
+        ) {
+            Text(selectedRowers.joinToString("\n") { "${it.firstName} ${it.lastName}".trim().ifBlank { "Sans nom" } }.ifBlank { "Aucun rameur sélectionné." })
+        }
+    }
+
+    cleanupPreview?.let { preview ->
+        AppModalDialog(
+            title = "Rameurs inactifs",
+            onDismiss = onDismissInactiveCleanup,
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Supprimer",
+                    onConfirm = { showInactiveDeleteDialog = true },
+                    dismissLabel = "Fermer",
+                    onDismiss = onDismissInactiveCleanup,
+                    confirmEnabled = preview.rowers.isNotEmpty() && !uiState.isWorking,
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                )
+            },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${preview.rowers.size} rameur(s) sans sortie depuis le ${formatDateForDisplay(preview.cutoffDate)}.")
+                Text(preview.rowers.joinToString("\n") { "${it.firstName} ${it.lastName}".trim().ifBlank { "Sans nom" } }.ifBlank { "Aucun rameur inactif." })
+            }
+        }
+    }
+
+    if (showInactiveDeleteDialog) {
+        val count = cleanupPreview?.rowers?.size ?: 0
+        AppModalDialog(
+            title = "Supprimer $count rameurs ?",
+            onDismiss = { showInactiveDeleteDialog = false },
+            buttons = {
+                AppDialogActionRow(
+                    confirmLabel = "Supprimer",
+                    onConfirm = {
+                        showInactiveDeleteDialog = false
+                        onDeleteInactiveRowers()
+                    },
+                    onDismiss = { showInactiveDeleteDialog = false },
+                    confirmContainerColor = MaterialTheme.colorScheme.error,
+                    confirmContentColor = MaterialTheme.colorScheme.onError,
+                    confirmEnabled = count > 0 && !uiState.isWorking,
+                )
+            },
+        ) {
+            Text("Cette action masque les rameurs inactifs des listes actives sans modifier les anciennes sorties.")
+        }
+    }
 
     if (showHelpDialog) {
         AppModalDialog(
@@ -1363,15 +1849,125 @@ private fun RowerManagementSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            uiState.rowerManagement.rowers.forEach { rower ->
-                EditableListRow(
-                    label = listOf(rower.firstName, rower.lastName).filter { it.isNotBlank() }.joinToString(" "),
-                    secondaryLabel = null,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onToggleBulkSelectionMode,
                     enabled = !uiState.isWorking,
-                    onEdit = { onEdit(rower) },
-                    onDelete = { onDelete(rower) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (uiState.rowerManagement.isBulkSelectionMode) "Annuler sélection" else "Sélection multiple")
+                }
+                if (uiState.rowerManagement.isBulkSelectionMode) {
+                    Button(
+                        onClick = { showBulkDeleteDialog = true },
+                        enabled = selectedRowers.isNotEmpty() && !uiState.isWorking,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Supprimer")
+                    }
+                }
+            }
+            uiState.rowerManagement.rowers.forEach { rower ->
+                if (uiState.rowerManagement.isBulkSelectionMode) {
+                    RowerSelectionRow(
+                        rower = rower,
+                        selected = rower.id in uiState.rowerManagement.selectedRowerIds,
+                        enabled = !uiState.isWorking,
+                        onSelectedChanged = { selected -> onRowerSelected(rower.id, selected) },
+                    )
+                } else {
+                    EditableListRow(
+                        label = "${rower.firstName} ${rower.lastName}".trim().ifBlank { "Sans nom" },
+                        secondaryLabel = null,
+                        enabled = !uiState.isWorking,
+                        onEdit = { onEdit(rower) },
+                        onDelete = { onDelete(rower) },
+                    )
+                }
+            }
+        }
+
+        SettingsSection(
+            title = "Nettoyage des rameurs",
+            description = "Masquer les rameurs sans sortie récente, sans toucher à l'historique.",
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Activer nettoyage automatique", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    Text("Au démarrage, masque les rameurs inactifs selon la durée choisie.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = uiState.rowerManagement.automaticCleanupEnabled,
+                    onCheckedChange = onAutomaticCleanupEnabledChanged,
+                    enabled = !uiState.isWorking,
                 )
             }
+            AppTextField(
+                value = uiState.rowerManagement.cleanupMonthsInput,
+                onValueChange = trackedOnCleanupMonthsChanged,
+                label = "Durée d'inactivité (mois)",
+                modifier = Modifier.fillMaxWidth(),
+                type = AppTextFieldType.NUMERIC,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onSaveCleanupSettings,
+                    enabled = !uiState.isWorking,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Enregistrer")
+                }
+                Button(
+                    onClick = onPreviewInactiveCleanup,
+                    enabled = !uiState.isWorking,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Supprimer rameurs inactifs")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowerSelectionRow(
+    rower: RowerEntity,
+    selected: Boolean,
+    enabled: Boolean,
+    onSelectedChanged: (Boolean) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = onSelectedChanged,
+                enabled = enabled,
+            )
+            Text(
+                text = "${rower.firstName} ${rower.lastName}".trim().ifBlank { "Sans nom" },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+            )
         }
     }
 }
@@ -1942,22 +2538,28 @@ private fun AdvancedAccessSection(
     onSuperAdminNewPinChanged: (String) -> Unit,
     onSuperAdminConfirmPinChanged: (String) -> Unit,
     onChangeSuperAdminPin: () -> Unit,
+    showCurrentPinField: Boolean = true,
+    title: String = "PIN super administrateur",
+    description: String = "Mettre à jour le code PIN utilisé pour accéder à la section super administrateur.",
+    confirmButtonLabel: String = "Modifier le PIN super administrateur",
 ) {
     val trackedOnSuperAdminCurrentPinChanged = rememberInteractionAwareValueChange(onSuperAdminCurrentPinChanged)
     val trackedOnSuperAdminNewPinChanged = rememberInteractionAwareValueChange(onSuperAdminNewPinChanged)
     val trackedOnSuperAdminConfirmPinChanged = rememberInteractionAwareValueChange(onSuperAdminConfirmPinChanged)
 
     SettingsSection(
-        title = "PIN super administrateur",
-        description = "Mettre à jour le code PIN utilisé pour accéder à la section super administrateur.",
+        title = title,
+        description = description,
     ) {
-        AppTextField(
-            value = uiState.superAdminCurrentPinInput,
-            onValueChange = trackedOnSuperAdminCurrentPinChanged,
-            label = "PIN actuel",
-            modifier = Modifier.fillMaxWidth(),
-            type = AppTextFieldType.PIN,
-        )
+        if (showCurrentPinField) {
+            AppTextField(
+                value = uiState.superAdminCurrentPinInput,
+                onValueChange = trackedOnSuperAdminCurrentPinChanged,
+                label = "PIN actuel",
+                modifier = Modifier.fillMaxWidth(),
+                type = AppTextFieldType.PIN,
+            )
+        }
         AppTextField(
             value = uiState.superAdminNewPinInput,
             onValueChange = trackedOnSuperAdminNewPinChanged,
@@ -1977,7 +2579,7 @@ private fun AdvancedAccessSection(
             enabled = !uiState.isWorking,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(if (uiState.isWorking) "Traitement..." else "Modifier le PIN super administrateur")
+            Text(if (uiState.isWorking) "Traitement..." else confirmButtonLabel)
         }
     }
 }
@@ -2049,6 +2651,15 @@ fun SettingsRowersRoute(
         onEdit = viewModel::startEditingRower,
         onCancelEditing = viewModel::cancelRowerEditing,
         onDelete = viewModel::deleteRower,
+        onToggleBulkSelectionMode = viewModel::toggleRowerBulkSelectionMode,
+        onRowerSelected = viewModel::onRowerSelected,
+        onDeleteSelectedRowers = viewModel::deleteSelectedRowers,
+        onAutomaticCleanupEnabledChanged = viewModel::onRowerAutomaticCleanupEnabledChanged,
+        onCleanupMonthsChanged = viewModel::onRowerCleanupMonthsChanged,
+        onSaveCleanupSettings = viewModel::saveRowerCleanupSettings,
+        onPreviewInactiveCleanup = viewModel::previewInactiveRowersCleanup,
+        onDismissInactiveCleanup = viewModel::dismissInactiveRowersCleanup,
+        onDeleteInactiveRowers = viewModel::deleteInactiveRowersFromPreview,
         onDismissFeedback = viewModel::clearMessage,
         onImportRowers = {
             viewModel.clearMessage()
@@ -2127,6 +2738,15 @@ private fun RowerManagementScreen(
     onEdit: (RowerEntity) -> Unit,
     onCancelEditing: () -> Unit,
     onDelete: (RowerEntity) -> Unit,
+    onToggleBulkSelectionMode: () -> Unit,
+    onRowerSelected: (Long, Boolean) -> Unit,
+    onDeleteSelectedRowers: () -> Unit,
+    onAutomaticCleanupEnabledChanged: (Boolean) -> Unit,
+    onCleanupMonthsChanged: (String) -> Unit,
+    onSaveCleanupSettings: () -> Unit,
+    onPreviewInactiveCleanup: () -> Unit,
+    onDismissInactiveCleanup: () -> Unit,
+    onDeleteInactiveRowers: () -> Unit,
     onDismissFeedback: () -> Unit,
     onImportRowers: () -> Unit,
 ) {
@@ -2151,6 +2771,15 @@ private fun RowerManagementScreen(
                 onEdit = onEdit,
                 onCancelEditing = onCancelEditing,
                 onDelete = onDelete,
+                onToggleBulkSelectionMode = onToggleBulkSelectionMode,
+                onRowerSelected = onRowerSelected,
+                onDeleteSelectedRowers = onDeleteSelectedRowers,
+                onAutomaticCleanupEnabledChanged = onAutomaticCleanupEnabledChanged,
+                onCleanupMonthsChanged = onCleanupMonthsChanged,
+                onSaveCleanupSettings = onSaveCleanupSettings,
+                onPreviewInactiveCleanup = onPreviewInactiveCleanup,
+                onDismissInactiveCleanup = onDismissInactiveCleanup,
+                onDeleteInactiveRowers = onDeleteInactiveRowers,
                 onImportRowers = onImportRowers,
             )
         }

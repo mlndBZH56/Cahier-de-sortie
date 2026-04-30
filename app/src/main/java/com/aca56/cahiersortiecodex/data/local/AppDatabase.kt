@@ -21,6 +21,7 @@ import com.aca56.cahiersortiecodex.data.local.dao.SessionRowerDao
 import com.aca56.cahiersortiecodex.data.local.entity.BoatEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatPhotoEntity
 import com.aca56.cahiersortiecodex.data.local.entity.BoatRepairEntity
+import com.aca56.cahiersortiecodex.data.local.entity.AppLogEntity
 import com.aca56.cahiersortiecodex.data.local.entity.DestinationEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RemarkEntity
 import com.aca56.cahiersortiecodex.data.local.entity.RepairUpdateEntity
@@ -31,6 +32,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
 @Database(
     entities = [
         RowerEntity::class,
+        AppLogEntity::class,
         BoatEntity::class,
         BoatRepairEntity::class,
         BoatPhotoEntity::class,
@@ -40,7 +42,7 @@ import com.aca56.cahiersortiecodex.data.local.entity.SessionRowerEntity
         RemarkEntity::class,
         RepairUpdateEntity::class,
     ],
-    version = 7,
+    version = 10,
     exportSchema = false,
 )
 @TypeConverters(SessionStatusConverter::class, RemarkStatusConverter::class)
@@ -69,6 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
             database.execSQL("DELETE FROM destinations")
             database.execSQL("DELETE FROM boats")
             database.execSQL("DELETE FROM rowers")
+            database.execSQL("DELETE FROM logs")
             runCatching {
                 database.execSQL("DELETE FROM sqlite_sequence")
             }
@@ -101,6 +104,9 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_4_5,
                     MIGRATION_5_6,
                     MIGRATION_6_7,
+                    MIGRATION_7_8,
+                    MIGRATION_8_9,
+                    MIGRATION_9_10,
                 )
                     .build()
                     .also { INSTANCE = it }
@@ -316,6 +322,37 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE boats ADD COLUMN weight REAL")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timestampMillis INTEGER NOT NULL,
+                        timestampLabel TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        level TEXT NOT NULL,
+                        actionType TEXT NOT NULL,
+                        entity TEXT NOT NULL,
+                        details TEXT NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("DROP INDEX IF EXISTS index_logs_timestampMillis")
+            }
+        }
+
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE rowers ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

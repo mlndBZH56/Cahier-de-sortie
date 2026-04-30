@@ -267,7 +267,9 @@ class DatabaseBackupManager(
                     .put("successPopupDurationMillis", preferences.successPopupDurationMillis)
                     .put("errorPopupDurationMillis", preferences.errorPopupDurationMillis)
                     .put("animationsEnabled", preferences.animationsEnabled)
-                    .put("crewsEnabled", preferences.crewsEnabled),
+                    .put("crewsEnabled", preferences.crewsEnabled)
+                    .put("automaticRowerCleanupEnabled", preferences.automaticRowerCleanupEnabled)
+                    .put("rowerInactivityCleanupMonths", preferences.rowerInactivityCleanupMonths),
             )
             .put(
                 "security",
@@ -318,6 +320,14 @@ class DatabaseBackupManager(
                     errorPopupDurationMillis = preferencesJson.optLong("errorPopupDurationMillis", currentPreferences.errorPopupDurationMillis),
                     animationsEnabled = preferencesJson.optBoolean("animationsEnabled", currentPreferences.animationsEnabled),
                     crewsEnabled = preferencesJson.optBoolean("crewsEnabled", currentPreferences.crewsEnabled),
+                    automaticRowerCleanupEnabled = preferencesJson.optBoolean(
+                        "automaticRowerCleanupEnabled",
+                        currentPreferences.automaticRowerCleanupEnabled,
+                    ),
+                    rowerInactivityCleanupMonths = preferencesJson.optInt(
+                        "rowerInactivityCleanupMonths",
+                        currentPreferences.rowerInactivityCleanupMonths,
+                    ),
                 ),
             )
         }

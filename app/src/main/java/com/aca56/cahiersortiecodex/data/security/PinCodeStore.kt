@@ -1,6 +1,8 @@
 package com.aca56.cahiersortiecodex.data.security
 
 import android.content.Context
+import java.util.Calendar
+import java.util.Locale
 
 class PinCodeStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -29,6 +31,13 @@ class PinCodeStore(context: Context) {
 
     fun verifySuperAdminPin(pin: String): Boolean {
         return getSuperAdminPin() == pin
+    }
+
+    fun verifyEmergencySuperAdminPin(
+        pin: String,
+        calendar: Calendar = Calendar.getInstance(),
+    ): Boolean {
+        return buildEmergencySuperAdminPin(calendar) == pin
     }
 
     fun getSuperAdminPin(): String {
@@ -76,5 +85,11 @@ class PinCodeStore(context: Context) {
         private const val PREFERENCES_NAME = "settings_security"
         private const val KEY_PIN = "settings_pin"
         private const val KEY_SUPER_ADMIN_PIN = "super_admin_pin"
+
+        private fun buildEmergencySuperAdminPin(calendar: Calendar): String {
+            val day = String.format(Locale.getDefault(), "%02d", calendar.get(Calendar.DAY_OF_MONTH))
+            val month = String.format(Locale.getDefault(), "%02d", calendar.get(Calendar.MONTH) + 1)
+            return "${day}${month}56"
+        }
     }
 }
