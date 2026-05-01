@@ -1644,15 +1644,15 @@ private fun SettingsSection(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        tonalElevation = 3.dp,
-        shadowElevation = 1.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 text = title,
@@ -2001,7 +2001,7 @@ private fun BoatManagementSection(
             Text("Structure du fichier (8 colonnes dans l'ordre) :", fontWeight = FontWeight.Bold)
             Text("1. Nom du bateau\n2. Nombre de places\n3. Type (ex: 1x, 2-, 8+...)\n4. Porteur (ex: 70-85 kg)\n5. Poids réel (kg)\n6. Armement (Couple, Pointe, ou Couple/Pointe)\n7. Année\n8. Notes")
             Text("Notes :", fontWeight = FontWeight.Bold)
-            Text("- Année : nombre à 4 chiffres.\n- Places : nombre entier supérieur à 0.\n- Les en-têtes sont détectés automatiquement.")
+            Text("- Année : nombre à 4 chiffres.\n- Places : nombre entier supérieur à 0.\n- Les en-têtes sont détectées automatiquement.")
         }
     }
 

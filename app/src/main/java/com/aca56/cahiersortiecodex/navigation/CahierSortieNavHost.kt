@@ -1,3 +1,4 @@
+                SettingsDestinationsRoute(contentPadding = innerPadding, viewModel = settingsViewModel)
 package com.aca56.cahiersortiecodex.navigation
 
 import androidx.compose.runtime.Composable
@@ -342,10 +343,13 @@ fun CahierSortieNavHost(navController: NavHostController) {
                 SettingsRowersRoute(contentPadding = innerPadding, viewModel = settingsViewModel)
             }
             composable(AppDestination.SettingsBoats.route) {
+                SettingsBoatsRoute(
+                    contentPadding = innerPadding,
                 SettingsBoatsRoute(contentPadding = innerPadding, viewModel = settingsViewModel)
-            }
-            composable(AppDestination.SettingsDestinations.route) {
-                SettingsDestinationsRoute(contentPadding = innerPadding, viewModel = settingsViewModel)
+                    contentPadding = innerPadding,
+                    viewModel = settingsViewModel,
+                    onBack = { navController.navigateUp() },
+                )
             }
         }
     }
